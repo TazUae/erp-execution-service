@@ -3,7 +3,8 @@
 # Build from this repository root (standalone erp-execution-service):
 #   docker build -t erp-execution-service:latest .
 #
-# Runtime: pure Node — HTTP bridge to ERPNext (`ERP_BASE_URL`).
+# `erp-utils` is file:./packages/erp-utils — npm links node_modules/erp-utils -> ../packages/erp-utils.
+# The runtime image must keep that layout: packages/erp-utils next to node_modules (not /opt/packages/...).
 
 FROM node:20-bookworm AS builder
 WORKDIR /build
@@ -20,7 +21,8 @@ FROM node:20-bookworm
 WORKDIR /opt/erp-execution-service
 
 COPY --from=builder /build/package.json /build/package-lock.json ./
-COPY --from=builder /build/packages/erp-utils /opt/packages/erp-utils
+# Must match npm link target for file:./packages/erp-utils (../packages/erp-utils from node_modules/)
+COPY --from=builder /build/packages/erp-utils ./packages/erp-utils
 COPY --from=builder /build/node_modules ./node_modules
 COPY --from=builder /build/dist ./dist
 
