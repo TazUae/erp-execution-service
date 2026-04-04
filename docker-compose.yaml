@@ -1,5 +1,4 @@
-# Dokploy: file must exist at repo root. Env vars are injected by Dokploy / .env (no :? here — avoids compose parse issues).
-# Required at runtime: ERP_REMOTE_TOKEN, ERP_ADMIN_PASSWORD, ERP_BASE_URL (validated in app).
+# Alternate name for tools that look for docker-compose.yaml
 
 services:
   erp-execution-service:

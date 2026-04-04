@@ -54,6 +54,8 @@ ERPNext must implement `frappe.api.provisioning.read_site_db_name` (used for `re
 - This repo is **standalone**: clone root contains `Dockerfile` and **`docker-compose.yml`** (required for Dokploy compose deployments).
 - Build: `docker build -t erp-execution-service .` from the repo root.
 - Compose: `docker compose up -d --build` (set `ERP_REMOTE_TOKEN`, `ERP_ADMIN_PASSWORD`, `ERP_BASE_URL` in the environment or an `.env` file).
+- **If Dokploy reports “Compose file not found”:** in the compose app settings, set **Compose file path** to `docker-compose.yml` (repo root). If your Dokploy version clones into a subfolder, try `code/docker-compose.yml` instead. Ensure the **branch** is `main` and redeploy after pushing.
+- Identical stacks also exist as `compose.yml`, `compose.yaml`, and `docker-compose.yaml` for tooling that prefers those names.
 
 ## Documentation
 

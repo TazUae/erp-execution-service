@@ -1,5 +1,4 @@
-# Same as docker-compose.yml — some runners default to compose.yml only.
-# Dokploy / Compose: build context is this directory (repo root for standalone clone).
+# Same stack as docker-compose.yml (Compose v2 also looks for compose.yml).
 
 services:
   erp-execution-service:
@@ -9,8 +8,8 @@ services:
     environment:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-8790}
-      ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN:?set ERP_REMOTE_TOKEN}
-      ERP_ADMIN_PASSWORD: ${ERP_ADMIN_PASSWORD:?set ERP_ADMIN_PASSWORD}
-      ERP_BASE_URL: ${ERP_BASE_URL:?set ERP_BASE_URL}
+      ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN}
+      ERP_ADMIN_PASSWORD: ${ERP_ADMIN_PASSWORD}
+      ERP_BASE_URL: ${ERP_BASE_URL}
       ERP_COMMAND_TIMEOUT_MS: ${ERP_COMMAND_TIMEOUT_MS:-120000}
     restart: unless-stopped
