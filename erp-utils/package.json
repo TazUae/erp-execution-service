@@ -1,0 +1,20 @@
+{
+  "name": "erp-utils",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/site-config.js",
+  "types": "./dist/site-config.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/site-config.d.ts",
+      "import": "./dist/site-config.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}
