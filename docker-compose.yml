@@ -1,0 +1,18 @@
+# Dokploy / docker compose: build from repo root Dockerfile.
+# Set secrets in Dokploy (or a .env next to this file): ERP_REMOTE_TOKEN, ERP_ADMIN_PASSWORD, ERP_DB_ROOT_PASSWORD.
+
+services:
+  erp-execution-service:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8790:8790"
+    environment:
+      NODE_ENV: production
+      PORT: "8790"
+      ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN}
+      ERP_ADMIN_PASSWORD: ${ERP_ADMIN_PASSWORD}
+      ERP_DB_ROOT_PASSWORD: ${ERP_DB_ROOT_PASSWORD}
+      # Optional overrides — see src/config/env.ts
+      ERP_BENCH_PATH: ${ERP_BENCH_PATH:-/home/frappe/frappe-bench}
+      ERP_DB_HOST: ${ERP_DB_HOST:-db}
