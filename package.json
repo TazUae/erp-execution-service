@@ -5,15 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/server.ts",
-    "build": "tsc",
+    "build:erp-utils": "npm install --prefix ./packages/erp-utils && npm run build --prefix ./packages/erp-utils",
+    "build": "npm run build:erp-utils && tsc",
     "start": "node dist/server.js",
     "docker:build": "docker build -t erp-execution-service:latest .",
     "test": "node --import tsx --test src/app.test.ts src/providers/erpnext/result-mapper.test.ts src/providers/erpnext/site-config.test.ts"
   },
   "dependencies": {
-    "erp-utils": "file:./erp-utils",
+    "erp-utils": "file:./packages/erp-utils",
     "fastify": "^4.25.0",
-    "mysql2": "^3.20.0",
     "pino": "^8.21.0",
     "zod": "^3.22.0"
   },

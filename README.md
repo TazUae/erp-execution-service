@@ -4,10 +4,10 @@ Internal-only Node.js service that exposes a **narrow, typed** HTTP API for appr
 
 ## Purpose
 
-- **Allowlisted actions only** (`createSite`, `installErp`, `enableScheduler`, `addDomain`, `createApiUser`, `healthCheck`).
+- **Allowlisted actions only** (`createSite`, `readSiteDbName`, `installErp`, `enableScheduler`, `addDomain`, `createApiUser`, `healthCheck`).
 - **Bearer authentication** using `ERP_REMOTE_TOKEN` (same secret configured on the provisioning-agent caller).
 - **Structured responses** aligned with `provisioning-agent` `remote-contract.ts` (`ok` / `data` or `ok` / `error`).
-- **No** arbitrary shell, generic command runner, unrestricted bench passthrough, Docker control, or host control APIs.
+- **No** arbitrary shell, generic command runner, bench subprocesses, Docker control, or host control APIs — lifecycle calls are **HTTP POSTs** to ERPNext (`ERP_BASE_URL`).
 
 ## Endpoints
 
@@ -34,24 +34,30 @@ npm test
 
 | Variable | Description |
 |----------|-------------|
-| `ERP_REMOTE_TOKEN` | Bearer token (min 16 chars) shared with provisioning-agent |
-| `ERP_ADMIN_PASSWORD` | Admin password for `bench new-site --admin-password` (same as ERP stack) |
-| `ERP_DB_ROOT_PASSWORD` | MariaDB/MySQL root password for `bench new-site --db-root-password` (non-interactive) |
-| `ERP_BENCH_PATH` | Bench directory (default `/home/frappe/frappe-bench`) |
-| `ERP_BENCH_EXECUTABLE` | Bench binary name (default `bench`) |
-| `ERP_COMMAND_TIMEOUT_MS` | Per-action timeout (default `120000`) |
+| `ERP_REMOTE_TOKEN` | Bearer token (min 16 chars) shared with provisioning-agent and sent to ERPNext |
+| `ERP_BASE_URL` | ERPNext base URL (e.g. `http://axis-erp-backend:8000`) |
+| `ERP_ADMIN_PASSWORD` | Admin password passed to `frappe.api.provisioning.create_site` |
+| `ERP_COMMAND_TIMEOUT_MS` | Per-action HTTP timeout (default `120000`) |
 | `PORT` | Listen port (default `8790`) |
 | `NODE_ENV` | `development` \| `test` \| `production` |
 
+ERPNext must implement `frappe.api.provisioning.read_site_db_name` (used for `readSiteDbName` and post-`createSite` `db_name` resolution).
+
 ## Deployment
 
-- Deploy **only on private/internal networks** next to the ERP bench host (or on the same host).
+- Deploy **only on private/internal networks** with reachability to ERPNext (`ERP_BASE_URL`).
 - Do not expose this service on the public internet without additional controls.
 - Point `provisioning-agent` at `ERP_REMOTE_BASE_URL` (e.g. `http://erp-execution-service:8790`) and set `ERP_REMOTE_TOKEN` to the **same value** on both sides.
 
+### Docker / Dokploy
+
+- This repo is **standalone**: clone root contains `Dockerfile` and **`docker-compose.yml`** (required for Dokploy compose deployments).
+- Build: `docker build -t erp-execution-service .` from the repo root.
+- Compose: `docker compose up -d --build` (set `ERP_REMOTE_TOKEN`, `ERP_ADMIN_PASSWORD`, `ERP_BASE_URL` in the environment or an `.env` file).
+
 ## Documentation
 
-- Repository root: [`docs/erp-side-execution-service.md`](../docs/erp-side-execution-service.md)
+- Related design notes (when this package lives inside the control-plane monorepo): [`docs/erp-side-execution-service.md`](https://github.com/TazUae/control-plane/blob/main/docs/erp-side-execution-service.md)
 
 ## TODOs before switching production from Docker to remote
 

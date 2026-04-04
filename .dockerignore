@@ -1,7 +1,10 @@
 node_modules
 dist
+packages/erp-utils/node_modules
+packages/erp-utils/dist
 .git
 .env
 .env.*
-*.log
-README.md
+*.md
+.vscode
+npm-debug.log*

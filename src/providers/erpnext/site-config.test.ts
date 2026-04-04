@@ -32,7 +32,7 @@ test("parseSiteConfigDbNameJson rejects invalid JSON", () => {
   if (!r.ok) assert.equal(r.code, "INVALID_JSON");
 });
 
-test("readSiteConfigDbName reads file from bench tree", async () => {
+test("readSiteConfigDbName reads file from sites directory", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "erp-site-"));
   try {
     const site = "acme-corp";

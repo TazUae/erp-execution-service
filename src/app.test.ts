@@ -12,9 +12,8 @@ function testEnv() {
     NODE_ENV: "test",
     PORT: "8791",
     ERP_REMOTE_TOKEN: "test-token-16chars-min",
+    ERP_BASE_URL: "http://127.0.0.1:59999",
     ERP_ADMIN_PASSWORD: "password12",
-    ERP_DB_ROOT_PASSWORD: "dbroot-pass",
-    ERP_BENCH_PATH: "/tmp",
     ERP_COMMAND_TIMEOUT_MS: "5000",
   });
 }
@@ -250,7 +249,7 @@ test("POST /v1/erp/lifecycle maps adapter failure with INFRA_UNAVAILABLE", async
         ok: false,
         failure: {
           code: "INFRA_UNAVAILABLE",
-          message: "missing bench",
+          message: "remote unavailable",
           retryable: true,
         },
       };

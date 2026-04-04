@@ -1,5 +1,5 @@
+# Same as docker-compose.yml — some runners default to compose.yml only.
 # Dokploy / Compose: build context is this directory (repo root for standalone clone).
-# Required env: ERP_REMOTE_TOKEN, ERP_ADMIN_PASSWORD, ERP_BASE_URL
 
 services:
   erp-execution-service:

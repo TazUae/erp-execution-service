@@ -1,5 +1,7 @@
 node_modules/
 dist/
+packages/erp-utils/node_modules/
+packages/erp-utils/dist/
+*.log
 .env
 .env.local
-*.log

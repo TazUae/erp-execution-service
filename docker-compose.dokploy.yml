@@ -1,0 +1,29 @@
+# Optional: same as docker-compose.yml with external networks (when used from monorepo path).
+# For github.com/TazUae/erp-execution-service use docker-compose.yml at repo root.
+
+name: erp-execution-service
+
+services:
+  erp-execution-service:
+    build: .
+    init: true
+    restart: unless-stopped
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-8790}
+      ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN:?set ERP_REMOTE_TOKEN}
+      ERP_ADMIN_PASSWORD: ${ERP_ADMIN_PASSWORD:?set ERP_ADMIN_PASSWORD}
+      ERP_BASE_URL: ${ERP_BASE_URL:-http://axis-erp-backend:8000}
+      ERP_COMMAND_TIMEOUT_MS: ${ERP_COMMAND_TIMEOUT_MS:-120000}
+    expose:
+      - "${PORT:-8790}"
+    networks:
+      - dokploy-network
+      - axis-erp-internal
+
+networks:
+  dokploy-network:
+    external: true
+  axis-erp-internal:
+    name: axiserp-erpnext-pnzjyk_axis-erp-internal
+    external: true
