@@ -1,5 +1,5 @@
+import type { InternalExecError } from "../../lib/exec.js";
 import type { RemoteExecutionFailure, RemoteExecutionFailureCode } from "../../contracts/lifecycle.js";
-import { ErpCallError } from "../../lib/call-erp.js";
 
 const ALREADY_EXISTS_PATTERNS = [
   "already exists",
@@ -7,14 +7,12 @@ const ALREADY_EXISTS_PATTERNS = [
   "duplicate entry",
 ];
 
-function combinedLower(message: string, details?: string): string {
-  return `${message}\n${details ?? ""}`.toLowerCase();
+function combinedLower(error: InternalExecError): string {
+  return `${error.stdout}\n${error.stderr}\n${error.message}`.toLowerCase();
 }
 
-export function mapErpCallErrorToFailure(error: ErpCallError): RemoteExecutionFailure {
-  const msg = error.message;
-  const details = error.options.responseText;
-  const combined = combinedLower(msg, details);
+export function mapExecErrorToFailure(error: InternalExecError): RemoteExecutionFailure {
+  const combined = combinedLower(error);
 
   if (error.kind === "timeout") {
     return {
@@ -24,21 +22,22 @@ export function mapErpCallErrorToFailure(error: ErpCallError): RemoteExecutionFa
     };
   }
 
-  if (error.kind === "network") {
+  if (error.kind === "spawn_failed" && error.spawnErrno === "ENOENT") {
     return {
       code: "INFRA_UNAVAILABLE",
       message: "ERP execution infrastructure unavailable",
       retryable: true,
-      details: msg,
+      details:
+        "bench executable not found (check ERP_BENCH_EXECUTABLE and PATH; this service requires a bench-side runtime)",
     };
   }
 
-  if (error.kind === "parse") {
+  if (error.kind === "spawn_failed") {
     return {
       code: "INFRA_UNAVAILABLE",
       message: "ERP execution infrastructure unavailable",
       retryable: true,
-      details: msg,
+      details: error.message,
     };
   }
 
@@ -50,44 +49,11 @@ export function mapErpCallErrorToFailure(error: ErpCallError): RemoteExecutionFa
     };
   }
 
-  if (error.kind === "http") {
-    const status = error.options.status;
-    if (status === 503 || status === 502 || status === 404) {
-      return {
-        code: "INFRA_UNAVAILABLE",
-        message: "ERP execution infrastructure unavailable",
-        retryable: true,
-        details: msg,
-      };
-    }
-    if (status === 504 || status === 408) {
-      return {
-        code: "ERP_TIMEOUT",
-        message: "ERP lifecycle action timed out",
-        retryable: true,
-      };
-    }
-    if (status === 409) {
-      return {
-        code: "SITE_ALREADY_EXISTS",
-        message: "Site or domain already exists",
-        retryable: false,
-      };
-    }
+  if (error.kind === "nonzero_exit") {
     return {
       code: "ERP_COMMAND_FAILED",
       message: "ERP lifecycle command failed",
       retryable: false,
-      details: msg,
-    };
-  }
-
-  if (error.kind === "logical") {
-    return {
-      code: "ERP_COMMAND_FAILED",
-      message: msg || "ERP lifecycle command failed",
-      retryable: false,
-      details,
     };
   }
 

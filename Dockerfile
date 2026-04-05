@@ -3,8 +3,10 @@
 # Build from this repository root (standalone erp-execution-service):
 #   docker build -t erp-execution-service:latest .
 #
-# `erp-utils` is file:./packages/erp-utils — npm links node_modules/erp-utils -> ../packages/erp-utils.
-# The runtime image must keep that layout: packages/erp-utils next to node_modules (not /opt/packages/...).
+# Node-only runtime image: does NOT include Frappe bench, Python, or MariaDB.
+# Run on a host with bench, or mount ERP_BENCH_PATH and supply bench in the image.
+#
+# `erp-utils` is file:./packages/erp-utils — keep packages/erp-utils next to node_modules.
 
 FROM node:20-bookworm AS builder
 WORKDIR /build

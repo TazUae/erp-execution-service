@@ -1,38 +1,64 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mapErpCallErrorToFailure, mapFailureCodeToHttpStatus } from "./result-mapper.js";
-import { ErpCallError } from "../../lib/call-erp.js";
+import { mapExecErrorToFailure, mapFailureCodeToHttpStatus } from "./result-mapper.js";
+import type { InternalExecError } from "../../lib/exec.js";
 
-test("mapErpCallErrorToFailure maps timeout to ERP_TIMEOUT", () => {
-  const f = mapErpCallErrorToFailure(new ErpCallError("timeout", "ERP HTTP request timed out"));
+function makeError(partial: Partial<InternalExecError> & Pick<InternalExecError, "kind">): InternalExecError {
+  return {
+    message: partial.message ?? "err",
+    durationMs: partial.durationMs ?? 1,
+    stdout: partial.stdout ?? "",
+    stderr: partial.stderr ?? "",
+    ...partial,
+  };
+}
+
+test("mapExecErrorToFailure maps timeout to ERP_TIMEOUT", () => {
+  const f = mapExecErrorToFailure(
+    makeError({
+      kind: "timeout",
+      message: "timeout",
+    })
+  );
   assert.equal(f.code, "ERP_TIMEOUT");
   assert.equal(f.retryable, true);
 });
 
-test("mapErpCallErrorToFailure maps network to INFRA_UNAVAILABLE", () => {
-  const f = mapErpCallErrorToFailure(new ErpCallError("network", "fetch failed"));
+test("mapExecErrorToFailure maps ENOENT spawn to INFRA_UNAVAILABLE", () => {
+  const f = mapExecErrorToFailure(
+    makeError({
+      kind: "spawn_failed",
+      message: "spawn bench ENOENT",
+      spawnErrno: "ENOENT",
+    })
+  );
   assert.equal(f.code, "INFRA_UNAVAILABLE");
   assert.equal(f.retryable, true);
 });
 
-test("mapErpCallErrorToFailure maps already exists message to SITE_ALREADY_EXISTS", () => {
-  const f = mapErpCallErrorToFailure(
-    new ErpCallError("logical", "Site foo already exists")
+test("mapExecErrorToFailure maps already exists stderr to SITE_ALREADY_EXISTS", () => {
+  const f = mapExecErrorToFailure(
+    makeError({
+      kind: "nonzero_exit",
+      message: "exit 1",
+      stderr: "Site foo already exists",
+      exitCode: 1,
+    })
   );
   assert.equal(f.code, "SITE_ALREADY_EXISTS");
   assert.equal(f.retryable, false);
 });
 
-test("mapErpCallErrorToFailure maps generic logical to ERP_COMMAND_FAILED", () => {
-  const f = mapErpCallErrorToFailure(new ErpCallError("logical", "some other ERP error"));
-  assert.equal(f.code, "ERP_COMMAND_FAILED");
-});
-
-test("mapErpCallErrorToFailure maps HTTP 503 to INFRA_UNAVAILABLE", () => {
-  const f = mapErpCallErrorToFailure(
-    new ErpCallError("http", "bad gateway", { status: 503 })
+test("mapExecErrorToFailure maps generic nonzero exit to ERP_COMMAND_FAILED", () => {
+  const f = mapExecErrorToFailure(
+    makeError({
+      kind: "nonzero_exit",
+      message: "exit 1",
+      stderr: "some other bench error",
+      exitCode: 1,
+    })
   );
-  assert.equal(f.code, "INFRA_UNAVAILABLE");
+  assert.equal(f.code, "ERP_COMMAND_FAILED");
 });
 
 test("mapFailureCodeToHttpStatus returns expected codes", () => {
