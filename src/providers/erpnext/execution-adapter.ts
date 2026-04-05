@@ -3,7 +3,7 @@ import type { Env } from "../../config/env.js";
 import type { RemoteExecuteRequest } from "../../contracts/lifecycle.js";
 import type { RemoteExecutionFailure } from "../../contracts/lifecycle.js";
 import { validateDomain, validateSite, validateUsername } from "./validation.js";
-import { NotImplementedError } from "../../lib/http-adapter-placeholder.js";
+import { NotImplementedError } from "../../lib/http/errors.js";
 import type { Logger } from "pino";
 
 export type LifecycleActionOutcome =

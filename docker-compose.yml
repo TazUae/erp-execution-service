@@ -13,4 +13,6 @@ services:
       ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN}
       ERP_COMMAND_TIMEOUT_MS: ${ERP_COMMAND_TIMEOUT_MS:-120000}
       ERP_BASE_URL: ${ERP_BASE_URL:-}
+      ERP_AUTH_TOKEN: ${ERP_AUTH_TOKEN:-}
+      ERP_HEALTH_PATH: ${ERP_HEALTH_PATH:-/api/method/frappe.ping}
     restart: unless-stopped

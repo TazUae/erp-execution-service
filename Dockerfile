@@ -3,7 +3,7 @@
 # Build from this repository root (standalone erp-execution-service):
 #   docker build -t erp-execution-service:latest .
 #
-# Node-only runtime image. ERP work will be delegated to an HTTP API (ERP_BASE_URL) in a follow-up.
+# Node-only runtime image. ERP provisioning uses HttpProvisioningClient against ERP_BASE_URL.
 
 FROM node:20-bookworm AS builder
 WORKDIR /build
