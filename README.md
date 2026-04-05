@@ -33,6 +33,24 @@ This repository ships a **generic** `FrappeClient` and an **`ErpExecutionAdapter
 | `site_config.json` filesystem reads | Will use HTTP when the adapter is wired. |
 | `ERP_API_KEY` / `ERP_API_SECRET` + `Authorization: token key:secret` | Replaced by **`ERP_PROVISIONING_TOKEN`** + **`Authorization: Bearer …`** to match the deployed **`provisioning_api`** app. |
 
+### Obsolete variables (do not set)
+
+These belonged to the removed bench/DB execution model and **must not** be re-added to deployment or docs:
+
+`ERP_BENCH_PATH`, `ERP_BENCH_EXECUTABLE`, `ERP_ADMIN_PASSWORD`, `ERP_DB_ROOT_PASSWORD`, `ERP_DB_HOST`, `ERP_DB_PORT`, `ERP_SKIP_BENCH_RUNTIME_CHECK`, `ERP_VALIDATE_DB_SCHEMA`.
+
+## Runtime wiring (Docker / ERP)
+
+For outbound calls to ERPNext, this container must share a Docker network with the ERP stack so DNS resolves the backend service:
+
+| Item | Value |
+|------|--------|
+| **External Docker network (exact name)** | `axiserp-erpnext-pnzjyk_axis-erp-internal` |
+| **Intended `ERP_BASE_URL` (env-driven)** | `http://axis-erp-backend:8000` |
+| **Bearer token** | `ERP_PROVISIONING_TOKEN` must match **`provisioning_api_token`** in ERP **`sites/common_site_config.json`** |
+
+The tracked **`docker-compose.yml`** and **`docker-compose.dokploy.yml`** attach **`erp-execution-service`** to that external network **in addition to** this project’s default network (and, for Dokploy, `dokploy-network`). After deploy, **redeploy** the service, **verify** the container is on `axiserp-erpnext-pnzjyk_axis-erp-internal`, then run your **live connectivity checks** (e.g. outbound ping / lifecycle against ERP). Smoke-test automation is out of scope for this repo step.
+
 ## Role
 
 - **Stable API**: allowlisted actions (`createSite`, `readSiteDbName`, `installErp`, `enableScheduler`, `addDomain`, `createApiUser`, `healthCheck`), Bearer auth to **this** service (`ERP_REMOTE_TOKEN`), typed success/error envelopes.
@@ -92,7 +110,7 @@ Values match `src/config/env.ts`. See also **`.env.example`**.
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ERP_BASE_URL` | no* | — | Origin of the ERP stack (e.g. `http://axis-erp-backend:8000`). No trailing slash required. |
+| `ERP_BASE_URL` | no* | — | Origin of the ERP stack. **Production/Docker:** `http://axis-erp-backend:8000` (requires network attachment; see **Runtime wiring**). No trailing slash. |
 | `ERP_PROVISIONING_TOKEN` | no* | — | Bearer secret for `provisioning_api` methods; must match **`provisioning_api_token`** in ERP **`sites/common_site_config.json`**. |
 | `ERP_COMMAND_TIMEOUT_MS` | no | `30000` | Per-request timeout for outbound `fetch` to Frappe |
 | `ERP_METHOD_CREATE_SITE` | no | `provisioning_api.api.provisioning.create_site` | Dotted path for `createSite` |
@@ -118,7 +136,8 @@ Values match `src/config/env.ts`. See also **`.env.example`**.
 - **Compose file path:** set to **`docker-compose.yml`** (repo root). If Dokploy clones into a subfolder, use **`code/docker-compose.yml`** (or whatever prefix matches your checkout).
 - Build: `docker build -t erp-execution-service .` from the repo root.
 - Secrets: `ERP_REMOTE_TOKEN` (inbound); for outbound ERP, `ERP_BASE_URL` and `ERP_PROVISIONING_TOKEN` when enabling HTTP calls.
-- Optional: **`docker-compose.dokploy.yml`** — `expose` + external `dokploy-network` (no host `ports:`). Use only if that matches your Dokploy networking; otherwise stay on `docker-compose.yml`.
+- **Networks:** compose files declare external network **`axiserp-erpnext-pnzjyk_axis-erp-internal`** so the service can reach **`axis-erp-backend:8000`**. Ensure that network exists (created by the ERPNext stack) before starting this service.
+- Optional: **`docker-compose.dokploy.yml`** — `expose` + **`dokploy-network`** + the same ERP internal network. Use when that matches your Dokploy networking; otherwise stay on `docker-compose.yml`.
 
 ## Related documentation
 

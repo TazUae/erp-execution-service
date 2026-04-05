@@ -1,8 +1,9 @@
 # Optional overlay for Dokploy: init, expose (behind reverse proxy), attach to Dokploy's external network.
 # Same env contract as docker-compose.yml (HTTP-only ERP integration).
 #
-# Use when you need `expose` + `dokploy-network` instead of publishing host ports.
-# If you must join a second Docker network (e.g. shared ERP), duplicate the service `networks` entry and add a `networks:` block locally or extend this file.
+# The service joins:
+# - dokploy-network — reverse proxy / platform routing
+# - axiserp-erpnext-pnzjyk_axis-erp-internal — ERPNext backend (axis-erp-backend:8000)
 
 name: erp-execution-service
 
@@ -22,7 +23,11 @@ services:
       - "${PORT:-8790}"
     networks:
       - dokploy-network
+      - axis-erp-internal
 
 networks:
   dokploy-network:
     external: true
+  axis-erp-internal:
+    external: true
+    name: axiserp-erpnext-pnzjyk_axis-erp-internal

@@ -1,6 +1,9 @@
 # Dokploy: file must exist at repo root. Env vars are injected by Dokploy / .env (no :? here — avoids compose parse issues).
 #
 # HTTP-only ERP integration (see README migration note). No bench or local DB coupling.
+#
+# Runtime: attach this stack to the ERP stack’s internal Docker network so the service can
+# resolve the Frappe backend hostname (see README “Runtime wiring (Docker / ERP)”).
 
 services:
   erp-execution-service:
@@ -15,3 +18,11 @@ services:
       ERP_BASE_URL: ${ERP_BASE_URL:-}
       ERP_PROVISIONING_TOKEN: ${ERP_PROVISIONING_TOKEN:-}
     restart: unless-stopped
+    networks:
+      - default
+      - axis-erp-internal
+
+networks:
+  axis-erp-internal:
+    external: true
+    name: axiserp-erpnext-pnzjyk_axis-erp-internal
