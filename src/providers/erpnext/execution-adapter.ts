@@ -3,7 +3,7 @@ import type { Env } from "../../config/env.js";
 import type { RemoteExecuteRequest } from "../../contracts/lifecycle.js";
 import type { RemoteExecutionFailure } from "../../contracts/lifecycle.js";
 import { validateDomain, validateSite, validateUsername } from "./validation.js";
-import { NotImplementedError } from "../../lib/http/errors.js";
+import { NotImplementedError } from "../../lib/not-implemented-error.js";
 import type { Logger } from "pino";
 
 export type LifecycleActionOutcome =
@@ -20,12 +20,12 @@ function httpAdapterNotReadyFailure(): RemoteExecutionFailure {
     code: "INFRA_UNAVAILABLE",
     message: "ERP HTTP provisioning is not wired yet",
     retryable: true,
-    details: `${err.name}: ${err.message} (HttpProvisioningClient; ERP_BASE_URL)`,
+    details: `${err.name}: ${err.message} (FrappeClient; ERP_BASE_URL)`,
   };
 }
 
 /**
- * Lifecycle adapter: will delegate to HttpProvisioningClient against ERP_BASE_URL.
+ * Lifecycle adapter: will delegate to FrappeClient against ERP_BASE_URL.
  * Bench, subprocess, and filesystem-based ERP access have been removed.
  */
 export class ErpExecutionAdapter implements LifecycleAdapter {

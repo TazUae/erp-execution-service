@@ -1,6 +1,26 @@
 # erp-execution-service
 
-This service exposes a stable **HTTP** contract (`POST /v1/erp/lifecycle`) for `provisioning-agent` when `ERP_EXECUTION_BACKEND=remote`. **ERP lifecycle work** is integrated via an **HTTP-only** path to **ERPNext/Frappe** (`HttpProvisioningClient`). The legacy bench/subprocess/filesystem execution model has been removed.
+This service exposes a stable **HTTP** contract (`POST /v1/erp/lifecycle`) for `provisioning-agent` when `ERP_EXECUTION_BACKEND=remote`. **ERP lifecycle work** is integrated via an **HTTP-only** path to **ERPNext/Frappe** using the **`FrappeClient`** (`src/lib/frappe-client/`). The legacy bench/subprocess/filesystem execution model has been removed.
+
+## Frappe / ERPNext HTTP API
+
+Frappe exposes callable Python methods over HTTP:
+
+- **Pattern:** `POST /api/method/{dotted.path}`
+- **Example:** `POST /api/method/frappe.api.provisioning.create_site`
+- **Body:** JSON
+- **Auth:** `Authorization: token {API_KEY}:{API_SECRET}` (API Key + API Secret from ERPNext)
+
+Health checks often use **`GET /api/method/frappe.ping`**, which returns JSON with a `message` field (for example `"pong"`).
+
+This repository ships a **generic** `FrappeClient` that can call **any** whitelisted method. It does **not** assume particular provisioning endpoints exist yet; those will be invoked from the lifecycle adapter in a later step once they are implemented and deployed on the ERP stack.
+
+### Expected upstream behavior
+
+- Successful RPCs return JSON that includes a **`message`** field with the result payload.
+- Application-level failures may include an **`exc`** string (trace / error text). The client maps that to a normalized **`ERP_APPLICATION_ERROR`** result (no secrets in logs).
+- HTTP **401/403** indicate credential or permission problems relative to the token.
+- HTTP **404** usually means the method path is missing or not exposed.
 
 ## Migration (bench → HTTP-only)
 
@@ -10,26 +30,24 @@ This service exposes a stable **HTTP** contract (`POST /v1/erp/lifecycle`) for `
 | `ERP_BENCH_PATH`, `ERP_BENCH_EXECUTABLE` | No local bench tree. |
 | `ERP_DB_ROOT_PASSWORD`, `ERP_ADMIN_PASSWORD`, `ERP_DB_HOST`, `ERP_DB_PORT`, `ERP_DB_READONLY_*`, `ERP_VALIDATE_DB_SCHEMA` | No direct DB coupling for provisioning in this service. |
 | `ERP_SKIP_BENCH_RUNTIME_CHECK` | Bench startup checks removed. |
-| `site_config.json` filesystem reads | `readSiteDbName` will use HTTP when the adapter is wired. |
+| `site_config.json` filesystem reads | Will use HTTP when the adapter is wired. |
 
 ## Role
 
 - **Stable API**: allowlisted actions (`createSite`, `readSiteDbName`, `installErp`, `enableScheduler`, `addDomain`, `createApiUser`, `healthCheck`), Bearer auth to **this** service (`ERP_REMOTE_TOKEN`), typed success/error envelopes.
-- **Outbound ERP**: `HttpProvisioningClient` calls ERPNext at `ERP_BASE_URL` using Frappe token auth (`ERP_AUTH_TOKEN`). Lifecycle actions still return `503` / `INFRA_UNAVAILABLE` until the adapter delegates to the client in a follow-up step.
+- **Outbound ERP**: `FrappeClient` calls `ERP_BASE_URL` with token auth (`ERP_API_KEY` + `ERP_API_SECRET`). Lifecycle actions still return `503` / `INFRA_UNAVAILABLE` until the adapter delegates to the client.
 
-## ERPNext provisioning API (upstream)
+## ERPNext provisioning API (upstream, future)
 
-This service expects **custom whitelisted Frappe methods** to exist on the ERP stack (implemented and deployed separately), for example:
+Custom **whitelisted** Frappe methods are expected to exist on the ERP stack when provisioning is enabled, for example:
 
-- `POST /api/method/frappe.api.provisioning.create_site`
-- `POST /api/method/frappe.api.provisioning.install_erp`
-- `POST /api/method/frappe.api.provisioning.enable_scheduler`
-- `POST /api/method/frappe.api.provisioning.add_domain`
-- `POST /api/method/frappe.api.provisioning.create_api_user`
+- `frappe.api.provisioning.create_site`
+- `frappe.api.provisioning.install_erp`
+- `frappe.api.provisioning.enable_scheduler`
+- `frappe.api.provisioning.add_domain`
+- `frappe.api.provisioning.create_api_user`
 
-**Upstream health** defaults to `GET /api/method/frappe.ping` (override with `ERP_HEALTH_PATH`). If your site uses a different probe, set the path accordingly.
-
-Without those methods on ERPNext, provisioning calls will fail with mapped client errors (for example not found or upstream errors).
+Those are **not** implemented in this service; they must be provided by the ERP deployment. Until then, outbound calls may return **`METHOD_NOT_FOUND`** or other mapped errors if invoked.
 
 ## Endpoints
 
@@ -64,16 +82,16 @@ Values match `src/config/env.ts`.
 | `PORT` | no | `8790` | Listen port |
 | `NODE_ENV` | no | `development` | `development` \| `test` \| `production` |
 
-### Outbound HTTP client (ERPNext)
+### Outbound Frappe client (ERPNext)
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ERP_BASE_URL` | no* | — | Origin of the ERP stack (e.g. `https://erp-internal:8080`). No trailing slash required. |
-| `ERP_AUTH_TOKEN` | no* | — | Frappe API credentials as **`api_key:api_secret`** (sent as `Authorization: token <ERP_AUTH_TOKEN>`). Create API Key + API Secret in ERPNext. |
-| `ERP_COMMAND_TIMEOUT_MS` | no | `120000` | Per-request timeout for outbound `fetch` to ERPNext |
-| `ERP_HEALTH_PATH` | no | `/api/method/frappe.ping` | GET path for `HttpProvisioningClient.ping()` reachability checks |
+| `ERP_BASE_URL` | no* | — | Origin of the ERP stack (e.g. `http://axis-erp-backend:8000`). No trailing slash required. |
+| `ERP_API_KEY` | no* | — | Frappe API Key |
+| `ERP_API_SECRET` | no* | — | Frappe API Secret (paired with key; sent as `Authorization: token {ERP_API_KEY}:{ERP_API_SECRET}`) |
+| `ERP_COMMAND_TIMEOUT_MS` | no | `30000` | Per-request timeout for outbound `fetch` to Frappe |
 
-\*Required together when you use `createHttpProvisioningClient()` / outbound calls: set both `ERP_BASE_URL` and `ERP_AUTH_TOKEN`. The service can start without them until the adapter is wired.
+\*Required together when you use `createFrappeClientFromEnv()` / outbound calls: set `ERP_BASE_URL`, `ERP_API_KEY`, and `ERP_API_SECRET`. The service can start without them until the adapter is wired.
 
 ## Deployment
 
@@ -85,7 +103,7 @@ Values match `src/config/env.ts`.
 
 - **Compose file path:** set to **`docker-compose.yml`** (repo root). If Dokploy clones into a subfolder, use **`code/docker-compose.yml`** (or whatever prefix matches your checkout).
 - Build: `docker build -t erp-execution-service .` from the repo root.
-- Secrets: `ERP_REMOTE_TOKEN` (inbound); for outbound ERP, `ERP_BASE_URL` and `ERP_AUTH_TOKEN` when enabling HTTP provisioning.
+- Secrets: `ERP_REMOTE_TOKEN` (inbound); for outbound ERP, `ERP_BASE_URL`, `ERP_API_KEY`, and `ERP_API_SECRET` when enabling HTTP calls.
 - Optional: **`docker-compose.dokploy.yml`** — `expose` + external `dokploy-network` (no host `ports:`). Use only if that matches your Dokploy networking; otherwise stay on `docker-compose.yml`.
 
 ## Related documentation
@@ -96,5 +114,5 @@ Values match `src/config/env.ts`.
 
 - Confirm network path from `provisioning-agent` to this service (DNS, TLS if required).
 - Set `ERP_REMOTE_BASE_URL`, `ERP_REMOTE_TOKEN`, and `ERP_REMOTE_TIMEOUT_MS` on provisioning-agent.
-- Until the lifecycle adapter calls `HttpProvisioningClient`, expect `503` / `INFRA_UNAVAILABLE` for lifecycle actions from this service.
+- Until the lifecycle adapter calls `FrappeClient`, expect `503` / `INFRA_UNAVAILABLE` for lifecycle actions from this service.
 - Flip `ERP_EXECUTION_BACKEND=remote` per environment after the adapter is validated end-to-end.

@@ -3,7 +3,7 @@
 # Build from this repository root (standalone erp-execution-service):
 #   docker build -t erp-execution-service:latest .
 #
-# Node-only runtime image. ERP provisioning uses HttpProvisioningClient against ERP_BASE_URL.
+# Node-only runtime image. Outbound ERP calls use FrappeClient against ERP_BASE_URL when configured.
 
 FROM node:20-bookworm AS builder
 WORKDIR /build
