@@ -37,6 +37,10 @@ This repository ships a **generic** `FrappeClient` and an **`ErpExecutionAdapter
 - **Stable API**: allowlisted actions (`createSite`, `readSiteDbName`, `installErp`, `enableScheduler`, `addDomain`, `createApiUser`, `healthCheck`), Bearer auth to **this** service (`ERP_REMOTE_TOKEN`), typed success/error envelopes.
 - **Outbound ERP**: `ErpExecutionAdapter` uses `FrappeClient` against `ERP_BASE_URL` with token auth (`ERP_API_KEY` + `ERP_API_SECRET`). If those variables are unset, provisioning actions return **`503` / `INFRA_UNAVAILABLE`**. When set, the adapter issues real RPCs; **upstream provisioning logic may still be pending** on the ERP side.
 
+## ERP-side Frappe app (scaffold)
+
+The directory [`provisioning_api/`](provisioning_api/README.md) is a **Frappe custom app** that defines the whitelisted provisioning RPCs (`provisioning_api.api.provisioning.*`). It is **contract-only** (stubs return `NOT_IMPLEMENTED`); install it on your ERP stack and point `ERP_METHOD_*` on **erp-execution-service** at those dotted paths when ready.
+
 ## ERPNext provisioning API (upstream, future)
 
 Custom **whitelisted** Frappe methods are expected to exist on the ERP stack when provisioning is enabled, for example:
