@@ -13,7 +13,7 @@ Frappe exposes callable Python methods over HTTP:
 
 Health checks often use **`GET /api/method/frappe.ping`**, which returns JSON with a `message` field (for example `"pong"`).
 
-This repository ships a **generic** `FrappeClient` that can call **any** whitelisted method. It does **not** assume particular provisioning endpoints exist yet; those will be invoked from the lifecycle adapter in a later step once they are implemented and deployed on the ERP stack.
+This repository ships a **generic** `FrappeClient` and an **`ErpExecutionAdapter`** that maps each lifecycle action to a configurable dotted method (`POST /api/method/{dotted.path}`). **Upstream Python methods must be whitelisted in Frappe**; until they exist on your ERP deployment, calls may return **404** / **`METHOD_NOT_FOUND`**, which this service maps to **`NOT_IMPLEMENTED`** (HTTP **501**) in the lifecycle envelope.
 
 ### Expected upstream behavior
 
@@ -35,7 +35,7 @@ This repository ships a **generic** `FrappeClient` that can call **any** whiteli
 ## Role
 
 - **Stable API**: allowlisted actions (`createSite`, `readSiteDbName`, `installErp`, `enableScheduler`, `addDomain`, `createApiUser`, `healthCheck`), Bearer auth to **this** service (`ERP_REMOTE_TOKEN`), typed success/error envelopes.
-- **Outbound ERP**: `FrappeClient` calls `ERP_BASE_URL` with token auth (`ERP_API_KEY` + `ERP_API_SECRET`). Lifecycle actions still return `503` / `INFRA_UNAVAILABLE` until the adapter delegates to the client.
+- **Outbound ERP**: `ErpExecutionAdapter` uses `FrappeClient` against `ERP_BASE_URL` with token auth (`ERP_API_KEY` + `ERP_API_SECRET`). If those variables are unset, provisioning actions return **`503` / `INFRA_UNAVAILABLE`**. When set, the adapter issues real RPCs; **upstream provisioning logic may still be pending** on the ERP side.
 
 ## ERPNext provisioning API (upstream, future)
 
@@ -47,7 +47,7 @@ Custom **whitelisted** Frappe methods are expected to exist on the ERP stack whe
 - `frappe.api.provisioning.add_domain`
 - `frappe.api.provisioning.create_api_user`
 
-Those are **not** implemented in this service; they must be provided by the ERP deployment. Until then, outbound calls may return **`METHOD_NOT_FOUND`** or other mapped errors if invoked.
+Those methods are **not** implemented in this repository; they must exist on the ERP stack as **whitelisted** `@frappe.whitelist()` (or equivalent) Python entry points. The execution service is **transport-wired**; behavior depends on your ERP version and custom app.
 
 ## Endpoints
 
@@ -90,8 +90,16 @@ Values match `src/config/env.ts`.
 | `ERP_API_KEY` | no* | — | Frappe API Key |
 | `ERP_API_SECRET` | no* | — | Frappe API Secret (paired with key; sent as `Authorization: token {ERP_API_KEY}:{ERP_API_SECRET}`) |
 | `ERP_COMMAND_TIMEOUT_MS` | no | `30000` | Per-request timeout for outbound `fetch` to Frappe |
+| `ERP_METHOD_CREATE_SITE` | no | `frappe.api.provisioning.create_site` | Dotted path for `createSite` |
+| `ERP_METHOD_READ_SITE_DB_NAME` | no | `frappe.api.provisioning.read_site_db_name` | Dotted path for `readSiteDbName` |
+| `ERP_METHOD_INSTALL_ERP` | no | `frappe.api.provisioning.install_erp` | Dotted path for `installErp` |
+| `ERP_METHOD_ENABLE_SCHEDULER` | no | `frappe.api.provisioning.enable_scheduler` | Dotted path for `enableScheduler` |
+| `ERP_METHOD_ADD_DOMAIN` | no | `frappe.api.provisioning.add_domain` | Dotted path for `addDomain` |
+| `ERP_METHOD_CREATE_API_USER` | no | `frappe.api.provisioning.create_api_user` | Dotted path for `createApiUser` |
 
-\*Required together when you use `createFrappeClientFromEnv()` / outbound calls: set `ERP_BASE_URL`, `ERP_API_KEY`, and `ERP_API_SECRET`. The service can start without them until the adapter is wired.
+\*Required together for outbound ERP calls: set `ERP_BASE_URL`, `ERP_API_KEY`, and `ERP_API_SECRET`. The process can start without them; lifecycle actions that need ERP then return **`INFRA_UNAVAILABLE`** until configured.
+
+**Payload mapping (this service → Frappe JSON body):** the stable API uses camelCase fields (`site`, `apiUsername`, …). The adapter sends snake_case keys expected by typical Frappe handlers: `site` → `site_name`, `apiUsername` → `api_username`, plus `domain` where applicable.
 
 ## Deployment
 
@@ -114,5 +122,5 @@ Values match `src/config/env.ts`.
 
 - Confirm network path from `provisioning-agent` to this service (DNS, TLS if required).
 - Set `ERP_REMOTE_BASE_URL`, `ERP_REMOTE_TOKEN`, and `ERP_REMOTE_TIMEOUT_MS` on provisioning-agent.
-- Until the lifecycle adapter calls `FrappeClient`, expect `503` / `INFRA_UNAVAILABLE` for lifecycle actions from this service.
+- If outbound ERP env is unset, expect `503` / `INFRA_UNAVAILABLE` for provisioning actions. **`GET /internal/health`** still returns **`200`** and includes an **`upstream`** hint: when ERP is configured it uses **`GET /api/method/frappe.ping`** for reachability (missing methods do not affect liveness).
 - Flip `ERP_EXECUTION_BACKEND=remote` per environment after the adapter is validated end-to-end.

@@ -28,9 +28,13 @@ test("GET /internal/health returns ok", async () => {
   try {
     const res = await app.inject({ method: "GET", url: "/internal/health" });
     assert.equal(res.statusCode, 200);
-    const body = res.json() as { ok: boolean; data: { service: string } };
+    const body = res.json() as {
+      ok: boolean;
+      data: { service: string; upstream?: { erpReachable: boolean; reason?: string } };
+    };
     assert.equal(body.ok, true);
     assert.equal(body.data.service, "erp-execution-service");
+    assert.deepEqual(body.data.upstream, { erpReachable: false, reason: "not_configured" });
   } finally {
     await app.close();
   }

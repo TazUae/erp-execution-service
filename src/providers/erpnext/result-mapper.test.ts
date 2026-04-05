@@ -6,4 +6,5 @@ test("mapFailureCodeToHttpStatus returns expected codes", () => {
   assert.equal(mapFailureCodeToHttpStatus("INFRA_UNAVAILABLE"), 503);
   assert.equal(mapFailureCodeToHttpStatus("ERP_TIMEOUT"), 504);
   assert.equal(mapFailureCodeToHttpStatus("SITE_ALREADY_EXISTS"), 409);
+  assert.equal(mapFailureCodeToHttpStatus("NOT_IMPLEMENTED"), 501);
 });

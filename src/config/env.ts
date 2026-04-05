@@ -16,6 +16,13 @@ const EnvSchema = z.object({
   ERP_API_KEY: z.string().trim().min(1).optional(),
   /** Frappe API Secret. */
   ERP_API_SECRET: z.string().trim().min(1).optional(),
+  /** Dotted Frappe method for each lifecycle action (`POST /api/method/{path}`). */
+  ERP_METHOD_CREATE_SITE: z.string().trim().min(1).default("frappe.api.provisioning.create_site"),
+  ERP_METHOD_READ_SITE_DB_NAME: z.string().trim().min(1).default("frappe.api.provisioning.read_site_db_name"),
+  ERP_METHOD_INSTALL_ERP: z.string().trim().min(1).default("frappe.api.provisioning.install_erp"),
+  ERP_METHOD_ENABLE_SCHEDULER: z.string().trim().min(1).default("frappe.api.provisioning.enable_scheduler"),
+  ERP_METHOD_ADD_DOMAIN: z.string().trim().min(1).default("frappe.api.provisioning.add_domain"),
+  ERP_METHOD_CREATE_API_USER: z.string().trim().min(1).default("frappe.api.provisioning.create_api_user"),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

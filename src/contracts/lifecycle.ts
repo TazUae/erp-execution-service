@@ -91,6 +91,8 @@ export const RemoteExecutionFailureCodeSchema = z.enum([
   "ERP_VALIDATION_FAILED",
   "ERP_PARTIAL_SUCCESS",
   "SITE_ALREADY_EXISTS",
+  /** Upstream Frappe method missing or not whitelisted (HTTP 404 / METHOD_NOT_FOUND). */
+  "NOT_IMPLEMENTED",
 ]);
 export type RemoteExecutionFailureCode = z.infer<typeof RemoteExecutionFailureCodeSchema>;
 
