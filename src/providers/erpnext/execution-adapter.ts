@@ -26,9 +26,9 @@ export type ErpExecutionAdapterDeps = {
 function infraNotConfiguredFailure(): RemoteExecutionFailure {
   return {
     code: "INFRA_UNAVAILABLE",
-    message: "Outbound ERP is not configured (set ERP_BASE_URL, ERP_API_KEY, and ERP_API_SECRET)",
+    message: "Outbound ERP is not configured (set ERP_BASE_URL and ERP_PROVISIONING_TOKEN)",
     retryable: true,
-    details: "createFrappeClientFromEnv requires all three variables",
+    details: "createFrappeClientFromEnv requires ERP_BASE_URL and ERP_PROVISIONING_TOKEN (Bearer to provisioning_api)",
   };
 }
 

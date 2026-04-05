@@ -5,8 +5,8 @@ import { buildFrappeMethodUrl, joinFrappeBaseUrl } from "./url.js";
 
 export type FrappeClientOptions = {
   baseUrl: string;
-  apiKey: string;
-  apiSecret: string;
+  /** Same value as ERP `common_site_config.json` `provisioning_api_token`. */
+  provisioningToken: string;
   timeoutMs: number;
 };
 
@@ -24,16 +24,16 @@ export class FrappeClient {
   constructor(private readonly options: FrappeClientOptions) {}
 
   /**
-   * Frappe token auth: `Authorization: token {API_KEY}:{API_SECRET}`.
+   * Provisioning API auth: `Authorization: Bearer <ERP_PROVISIONING_TOKEN>`.
    * Raw values must never be logged.
    */
-  static buildAuthorizationHeader(apiKey: string, apiSecret: string): string {
-    return `token ${apiKey}:${apiSecret}`;
+  static buildAuthorizationHeader(provisioningToken: string): string {
+    return `Bearer ${provisioningToken}`;
   }
 
   /**
    * POST JSON to `/api/method/{method}`.
-   * @param method Dotted Frappe method path, e.g. `frappe.api.provisioning.create_site`
+   * @param method Dotted Frappe method path, e.g. `provisioning_api.api.provisioning.create_site`
    */
   async callMethod(method: string, payload?: unknown): Promise<FrappeResponse> {
     const url = buildFrappeMethodUrl(this.options.baseUrl, method);
@@ -60,7 +60,7 @@ export class FrappeClient {
 
     const headers: Record<string, string> = {
       Accept: "application/json",
-      Authorization: FrappeClient.buildAuthorizationHeader(this.options.apiKey, this.options.apiSecret),
+      Authorization: FrappeClient.buildAuthorizationHeader(this.options.provisioningToken),
     };
     if (method === "POST") {
       headers["Content-Type"] = "application/json";
@@ -167,23 +167,18 @@ export class FrappeClient {
 }
 
 export function createFrappeClientFromEnv(
-  env: Pick<Env, "ERP_BASE_URL" | "ERP_API_KEY" | "ERP_API_SECRET" | "ERP_COMMAND_TIMEOUT_MS">
+  env: Pick<Env, "ERP_BASE_URL" | "ERP_PROVISIONING_TOKEN" | "ERP_COMMAND_TIMEOUT_MS">
 ): FrappeClient {
   if (!env.ERP_BASE_URL) {
     throw new Error("ERP_BASE_URL is not set");
   }
-  const key = env.ERP_API_KEY?.trim();
-  const secret = env.ERP_API_SECRET?.trim();
-  if (!key) {
-    throw new Error("ERP_API_KEY is not set");
-  }
-  if (!secret) {
-    throw new Error("ERP_API_SECRET is not set");
+  const token = env.ERP_PROVISIONING_TOKEN?.trim();
+  if (!token) {
+    throw new Error("ERP_PROVISIONING_TOKEN is not set");
   }
   return new FrappeClient({
     baseUrl: env.ERP_BASE_URL,
-    apiKey: key,
-    apiSecret: secret,
+    provisioningToken: token,
     timeoutMs: env.ERP_COMMAND_TIMEOUT_MS,
   });
 }

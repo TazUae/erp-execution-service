@@ -13,8 +13,7 @@ function baseEnv(overrides?: Record<string, string | undefined>) {
     ERP_REMOTE_TOKEN: "test-token-16chars-min",
     ERP_COMMAND_TIMEOUT_MS: "5000",
     ERP_BASE_URL: "http://erp.example:8000",
-    ERP_API_KEY: "key",
-    ERP_API_SECRET: "secret",
+    ERP_PROVISIONING_TOKEN: "test-provisioning-token-16chars",
     ...overrides,
   });
 }
@@ -68,6 +67,7 @@ test("installErp maps to ERP_METHOD_INSTALL_ERP", async () => {
   const adapter = new ErpExecutionAdapter(env, logger, { frappeClient: client });
   await adapter.run({ action: "installErp", payload: { site: "valid-site" } });
   assert.equal(seenMethod, env.ERP_METHOD_INSTALL_ERP);
+  assert.equal(seenMethod, "provisioning_api.api.provisioning.install_erp");
 });
 
 test("addDomain sends site_name and domain", async () => {

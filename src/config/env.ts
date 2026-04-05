@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** HTTP-only ERP integration: inbound Bearer auth, outbound Frappe API key/secret and timeouts (see `lib/frappe-client/client.ts`). */
+/** HTTP-only ERP integration: inbound Bearer auth, outbound Bearer to Frappe provisioning API (see `lib/frappe-client/client.ts`). */
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(8790),
@@ -12,17 +12,31 @@ const EnvSchema = z.object({
    * Used by `FrappeClient` when calling Frappe/ERPNext.
    */
   ERP_BASE_URL: z.string().url().optional(),
-  /** Frappe API Key (paired with `ERP_API_SECRET` for `Authorization: token key:secret`). */
-  ERP_API_KEY: z.string().trim().min(1).optional(),
-  /** Frappe API Secret. */
-  ERP_API_SECRET: z.string().trim().min(1).optional(),
+  /**
+   * Shared secret for outbound calls to the ERP `provisioning_api` app.
+   * Sent as `Authorization: Bearer <ERP_PROVISIONING_TOKEN>` and must match
+   * `provisioning_api_token` in the ERP `sites/common_site_config.json`.
+   */
+  ERP_PROVISIONING_TOKEN: z.string().trim().min(16).optional(),
   /** Dotted Frappe method for each lifecycle action (`POST /api/method/{path}`). */
-  ERP_METHOD_CREATE_SITE: z.string().trim().min(1).default("frappe.api.provisioning.create_site"),
-  ERP_METHOD_READ_SITE_DB_NAME: z.string().trim().min(1).default("frappe.api.provisioning.read_site_db_name"),
-  ERP_METHOD_INSTALL_ERP: z.string().trim().min(1).default("frappe.api.provisioning.install_erp"),
-  ERP_METHOD_ENABLE_SCHEDULER: z.string().trim().min(1).default("frappe.api.provisioning.enable_scheduler"),
-  ERP_METHOD_ADD_DOMAIN: z.string().trim().min(1).default("frappe.api.provisioning.add_domain"),
-  ERP_METHOD_CREATE_API_USER: z.string().trim().min(1).default("frappe.api.provisioning.create_api_user"),
+  ERP_METHOD_CREATE_SITE: z.string().trim().min(1).default("provisioning_api.api.provisioning.create_site"),
+  ERP_METHOD_READ_SITE_DB_NAME: z
+    .string()
+    .trim()
+    .min(1)
+    .default("provisioning_api.api.provisioning.read_site_db_name"),
+  ERP_METHOD_INSTALL_ERP: z.string().trim().min(1).default("provisioning_api.api.provisioning.install_erp"),
+  ERP_METHOD_ENABLE_SCHEDULER: z
+    .string()
+    .trim()
+    .min(1)
+    .default("provisioning_api.api.provisioning.enable_scheduler"),
+  ERP_METHOD_ADD_DOMAIN: z.string().trim().min(1).default("provisioning_api.api.provisioning.add_domain"),
+  ERP_METHOD_CREATE_API_USER: z
+    .string()
+    .trim()
+    .min(1)
+    .default("provisioning_api.api.provisioning.create_api_user"),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

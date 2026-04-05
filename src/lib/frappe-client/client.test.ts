@@ -4,11 +4,12 @@ import http from "node:http";
 import { FrappeClient, createFrappeClientFromEnv } from "./client.js";
 import { buildFrappeMethodUrl, joinFrappeBaseUrl } from "./url.js";
 
+const TEST_TOKEN = "test-provisioning-token-16chars";
+
 function createClient(overrides?: Partial<ConstructorParameters<typeof FrappeClient>[0]>) {
   return new FrappeClient({
     baseUrl: "http://127.0.0.1:9",
-    apiKey: "key",
-    apiSecret: "secret",
+    provisioningToken: TEST_TOKEN,
     timeoutMs: 5_000,
     ...overrides,
   });
@@ -22,13 +23,15 @@ test("joinFrappeBaseUrl normalizes base and path", () => {
 
 test("buildFrappeMethodUrl encodes method segment and joins base", () => {
   assert.equal(
-    buildFrappeMethodUrl("http://axis-erp-backend:8000", "frappe.api.provisioning.create_site"),
-    "http://axis-erp-backend:8000/api/method/frappe.api.provisioning.create_site"
+    buildFrappeMethodUrl("http://axis-erp-backend:8000", "provisioning_api.api.provisioning.create_site"),
+    "http://axis-erp-backend:8000/api/method/provisioning_api.api.provisioning.create_site"
   );
 });
 
-test("buildAuthorizationHeader uses Frappe token scheme with key:secret", () => {
-  assert.equal(FrappeClient.buildAuthorizationHeader("k", "s"), "token k:s");
+test("buildAuthorizationHeader uses Bearer provisioning token (not legacy token key:secret)", () => {
+  assert.equal(FrappeClient.buildAuthorizationHeader("my-secret-token-16"), "Bearer my-secret-token-16");
+  assert.match(FrappeClient.buildAuthorizationHeader("x".repeat(16)), /^Bearer /);
+  assert.doesNotMatch(FrappeClient.buildAuthorizationHeader("x".repeat(16)), /^token /);
 });
 
 test("createFrappeClientFromEnv throws when ERP_BASE_URL missing", () => {
@@ -36,45 +39,30 @@ test("createFrappeClientFromEnv throws when ERP_BASE_URL missing", () => {
     () =>
       createFrappeClientFromEnv({
         ERP_BASE_URL: undefined,
-        ERP_API_KEY: "a",
-        ERP_API_SECRET: "b",
+        ERP_PROVISIONING_TOKEN: "a".repeat(16),
         ERP_COMMAND_TIMEOUT_MS: 5000,
       }),
     /ERP_BASE_URL is not set/
   );
 });
 
-test("createFrappeClientFromEnv throws when ERP_API_KEY missing", () => {
+test("createFrappeClientFromEnv throws when ERP_PROVISIONING_TOKEN missing", () => {
   assert.throws(
     () =>
       createFrappeClientFromEnv({
         ERP_BASE_URL: "https://erp.example.com",
-        ERP_API_KEY: undefined,
-        ERP_API_SECRET: "b",
+        ERP_PROVISIONING_TOKEN: undefined,
         ERP_COMMAND_TIMEOUT_MS: 5000,
       }),
-    /ERP_API_KEY is not set/
+    /ERP_PROVISIONING_TOKEN is not set/
   );
 });
 
-test("createFrappeClientFromEnv throws when ERP_API_SECRET missing", () => {
-  assert.throws(
-    () =>
-      createFrappeClientFromEnv({
-        ERP_BASE_URL: "https://erp.example.com",
-        ERP_API_KEY: "a",
-        ERP_API_SECRET: undefined,
-        ERP_COMMAND_TIMEOUT_MS: 5000,
-      }),
-    /ERP_API_SECRET is not set/
-  );
-});
-
-test("callMethod POST sends JSON, correct path, and Authorization header", async () => {
+test("callMethod POST sends JSON, correct path, and Bearer Authorization header", async () => {
   const server = http.createServer((req, res) => {
     assert.equal(req.method, "POST");
-    assert.match(req.url ?? "", /^\/api\/method\/frappe\.api\.provisioning\.create_site$/);
-    assert.equal(req.headers.authorization, "token key:secret");
+    assert.match(req.url ?? "", /^\/api\/method\/provisioning_api\.api\.provisioning\.create_site$/);
+    assert.equal(req.headers.authorization, `Bearer ${TEST_TOKEN}`);
     let buf = "";
     req.on("data", (c) => {
       buf += c;
@@ -91,7 +79,7 @@ test("callMethod POST sends JSON, correct path, and Authorization header", async
   const port = addr.port;
   try {
     const client = createClient({ baseUrl: `http://127.0.0.1:${port}` });
-    const r = await client.callMethod("frappe.api.provisioning.create_site", { site: "s1" });
+    const r = await client.callMethod("provisioning_api.api.provisioning.create_site", { site: "s1" });
     assert.equal(r.ok, true);
     if (r.ok) assert.equal(r.data, "created");
   } finally {
@@ -131,7 +119,7 @@ test("401 maps to AUTH_ERROR", async () => {
   const port = addr.port;
   try {
     const client = createClient({ baseUrl: `http://127.0.0.1:${port}` });
-    const r = await client.callMethod("frappe.api.provisioning.install_erp", {});
+    const r = await client.callMethod("provisioning_api.api.provisioning.install_erp", {});
     assert.equal(r.ok, false);
     if (!r.ok) {
       assert.equal(r.error.code, "AUTH_ERROR");
@@ -245,11 +233,11 @@ test("request times out when server is slow", async () => {
   }
 });
 
-test("ping uses GET /api/method/frappe.ping", async () => {
+test("ping uses GET /api/method/frappe.ping with Bearer auth", async () => {
   const server = http.createServer((req, res) => {
     assert.equal(req.method, "GET");
     assert.match(req.url ?? "", /^\/api\/method\/frappe\.ping$/);
-    assert.equal(req.headers.authorization, "token key:secret");
+    assert.equal(req.headers.authorization, `Bearer ${TEST_TOKEN}`);
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ message: "pong" }));
   });
