@@ -9,9 +9,9 @@ Frappe exposes callable Python methods over HTTP:
 - **Pattern:** `POST /api/method/{dotted.path}`
 - **Example:** `POST /api/method/provisioning_api.api.provisioning.create_site`
 - **Body:** JSON
-- **Auth (provisioning_api app):** `Authorization: Bearer <ERP_PROVISIONING_TOKEN>` — the same secret as `provisioning_api_token` in the ERP **`sites/common_site_config.json`**
+- **Auth (provisioning_api app):** `X-Provisioning-Token: <ERP_PROVISIONING_TOKEN>` — the same secret as `provisioning_api_token` in the ERP **`sites/common_site_config.json`**. Do **not** send this secret as `Authorization: Bearer …`; Frappe interprets `Bearer` as OAuth and can return **401** before **`provisioning_api`** runs.
 
-Health checks often use **`GET /api/method/frappe.ping`**, which returns JSON with a `message` field (for example `"pong"`). That ping uses the same **Bearer** header as other outbound calls.
+Health checks often use **`GET /api/method/frappe.ping`**, which returns JSON with a `message` field (for example `"pong"`). That ping uses the same **`X-Provisioning-Token`** header as other outbound calls.
 
 This repository ships a **generic** `FrappeClient` and an **`ErpExecutionAdapter`** that maps each lifecycle action to a configurable dotted method (`POST /api/method/{dotted.path}`). **Upstream Python methods must be whitelisted in Frappe**; until they exist on your ERP deployment, calls may return **404** / **`METHOD_NOT_FOUND`**, which this service maps to **`NOT_IMPLEMENTED`** (HTTP **501**) in the lifecycle envelope.
 
@@ -19,7 +19,7 @@ This repository ships a **generic** `FrappeClient` and an **`ErpExecutionAdapter
 
 - Successful RPCs return JSON that includes a **`message`** field with the result payload.
 - Application-level failures may include an **`exc`** string (trace / error text). The client maps that to a normalized **ERP_APPLICATION_ERROR** result (no secrets in logs).
-- HTTP **401/403** indicate credential or permission problems relative to the Bearer token.
+- HTTP **401/403** indicate credential or permission problems relative to the provisioning token (`X-Provisioning-Token`).
 - HTTP **404** usually means the method path is missing or not exposed.
 
 ## Migration (bench → HTTP-only)
@@ -31,7 +31,7 @@ This repository ships a **generic** `FrappeClient` and an **`ErpExecutionAdapter
 | `ERP_DB_ROOT_PASSWORD`, `ERP_ADMIN_PASSWORD`, `ERP_DB_HOST`, `ERP_DB_PORT`, `ERP_DB_READONLY_*`, `ERP_VALIDATE_DB_SCHEMA` | No direct DB coupling for provisioning in this service. |
 | `ERP_SKIP_BENCH_RUNTIME_CHECK` | Bench startup checks removed. |
 | `site_config.json` filesystem reads | Will use HTTP when the adapter is wired. |
-| `ERP_API_KEY` / `ERP_API_SECRET` + `Authorization: token key:secret` | Replaced by **`ERP_PROVISIONING_TOKEN`** + **`Authorization: Bearer …`** to match the deployed **`provisioning_api`** app. |
+| `ERP_API_KEY` / `ERP_API_SECRET` + `Authorization: token key:secret` | Replaced by **`ERP_PROVISIONING_TOKEN`** sent as **`X-Provisioning-Token`** (not `Authorization: Bearer`, which Frappe treats as OAuth). |
 
 ### Obsolete variables (do not set)
 
@@ -47,14 +47,14 @@ For outbound calls to ERPNext, this container must share a Docker network with t
 |------|--------|
 | **External Docker network (exact name)** | `axiserp-erpnext-pnzjyk_axis-erp-internal` |
 | **Intended `ERP_BASE_URL` (env-driven)** | `http://axis-erp-backend:8000` |
-| **Bearer token** | `ERP_PROVISIONING_TOKEN` must match **`provisioning_api_token`** in ERP **`sites/common_site_config.json`** |
+| **Provisioning token header** | `ERP_PROVISIONING_TOKEN` must match **`provisioning_api_token`** in ERP **`sites/common_site_config.json`** (sent as **`X-Provisioning-Token`**) |
 
 The tracked **`docker-compose.yml`** and **`docker-compose.dokploy.yml`** attach **`erp-execution-service`** to that external network **in addition to** this project’s default network (and, for Dokploy, `dokploy-network`). After deploy, **redeploy** the service, **verify** the container is on `axiserp-erpnext-pnzjyk_axis-erp-internal`, then run your **live connectivity checks** (e.g. outbound ping / lifecycle against ERP). Smoke-test automation is out of scope for this repo step.
 
 ## Role
 
 - **Stable API**: allowlisted actions (`createSite`, `readSiteDbName`, `installErp`, `enableScheduler`, `addDomain`, `createApiUser`, `healthCheck`), Bearer auth to **this** service (`ERP_REMOTE_TOKEN`), typed success/error envelopes.
-- **Outbound ERP**: `ErpExecutionAdapter` uses `FrappeClient` against `ERP_BASE_URL` with **`Authorization: Bearer <ERP_PROVISIONING_TOKEN>`**. If `ERP_BASE_URL` or `ERP_PROVISIONING_TOKEN` is unset, provisioning actions return **`503` / `INFRA_UNAVAILABLE`**. When set, the adapter issues real RPCs; **upstream provisioning logic may still be pending** on the ERP side.
+- **Outbound ERP**: `ErpExecutionAdapter` uses `FrappeClient` against `ERP_BASE_URL` with **`X-Provisioning-Token: <ERP_PROVISIONING_TOKEN>`**. If `ERP_BASE_URL` or `ERP_PROVISIONING_TOKEN` is unset, provisioning actions return **`503` / `INFRA_UNAVAILABLE`**. When set, the adapter issues real RPCs; **upstream provisioning logic may still be pending** on the ERP side.
 
 ## ERP-side Frappe app (scaffold)
 
@@ -111,7 +111,7 @@ Values match `src/config/env.ts`. See also **`.env.example`**.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `ERP_BASE_URL` | no* | — | Origin of the ERP stack. **Production/Docker:** `http://axis-erp-backend:8000` (requires network attachment; see **Runtime wiring**). No trailing slash. |
-| `ERP_PROVISIONING_TOKEN` | no* | — | Bearer secret for `provisioning_api` methods; must match **`provisioning_api_token`** in ERP **`sites/common_site_config.json`**. |
+| `ERP_PROVISIONING_TOKEN` | no* | — | Secret for `provisioning_api` methods, sent as HTTP header **`X-Provisioning-Token`** (not `Authorization: Bearer`); must match **`provisioning_api_token`** in ERP **`sites/common_site_config.json`**. |
 | `ERP_COMMAND_TIMEOUT_MS` | no | `30000` | Per-request timeout for outbound `fetch` to Frappe |
 | `ERP_METHOD_CREATE_SITE` | no | `provisioning_api.api.provisioning.create_site` | Dotted path for `createSite` |
 | `ERP_METHOD_READ_SITE_DB_NAME` | no | `provisioning_api.api.provisioning.read_site_db_name` | Dotted path for `readSiteDbName` |

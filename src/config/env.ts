@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** HTTP-only ERP integration: inbound Bearer auth, outbound Bearer to Frappe provisioning API (see `lib/frappe-client/client.ts`). */
+/** HTTP-only ERP integration: inbound Bearer auth; outbound `X-Provisioning-Token` to Frappe provisioning API (see `lib/frappe-client/client.ts`). */
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(8790),
@@ -14,7 +14,7 @@ const EnvSchema = z.object({
   ERP_BASE_URL: z.string().url().optional(),
   /**
    * Shared secret for outbound calls to the ERP `provisioning_api` app.
-   * Sent as `Authorization: Bearer <ERP_PROVISIONING_TOKEN>` and must match
+   * Sent as `X-Provisioning-Token: <ERP_PROVISIONING_TOKEN>` and must match
    * `provisioning_api_token` in the ERP `sites/common_site_config.json`.
    */
   ERP_PROVISIONING_TOKEN: z.string().trim().min(16).optional(),

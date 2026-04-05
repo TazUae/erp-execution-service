@@ -28,7 +28,8 @@ function infraNotConfiguredFailure(): RemoteExecutionFailure {
     code: "INFRA_UNAVAILABLE",
     message: "Outbound ERP is not configured (set ERP_BASE_URL and ERP_PROVISIONING_TOKEN)",
     retryable: true,
-    details: "createFrappeClientFromEnv requires ERP_BASE_URL and ERP_PROVISIONING_TOKEN (Bearer to provisioning_api)",
+    details:
+      "createFrappeClientFromEnv requires ERP_BASE_URL and ERP_PROVISIONING_TOKEN (X-Provisioning-Token to provisioning_api)",
   };
 }
 

@@ -3,6 +3,9 @@ import { errResult, safeExcMessage, truncateSafeSnippet } from "./errors.js";
 import type { FrappeRawJson, FrappeResponse } from "./types.js";
 import { buildFrappeMethodUrl, joinFrappeBaseUrl } from "./url.js";
 
+/** Outbound provisioning auth header — not `Authorization: Bearer`, which Frappe handles as OAuth before app code runs. */
+export const FRAPPE_PROVISIONING_TOKEN_HEADER = "X-Provisioning-Token";
+
 export type FrappeClientOptions = {
   baseUrl: string;
   /** Same value as ERP `common_site_config.json` `provisioning_api_token`. */
@@ -22,14 +25,6 @@ const RETRYABLE_NETWORK_CODES = new Set([
 
 export class FrappeClient {
   constructor(private readonly options: FrappeClientOptions) {}
-
-  /**
-   * Provisioning API auth: `Authorization: Bearer <ERP_PROVISIONING_TOKEN>`.
-   * Raw values must never be logged.
-   */
-  static buildAuthorizationHeader(provisioningToken: string): string {
-    return `Bearer ${provisioningToken}`;
-  }
 
   /**
    * POST JSON to `/api/method/{method}`.
@@ -60,7 +55,7 @@ export class FrappeClient {
 
     const headers: Record<string, string> = {
       Accept: "application/json",
-      Authorization: FrappeClient.buildAuthorizationHeader(this.options.provisioningToken),
+      [FRAPPE_PROVISIONING_TOKEN_HEADER]: this.options.provisioningToken,
     };
     if (method === "POST") {
       headers["Content-Type"] = "application/json";

@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { FrappeClient, createFrappeClientFromEnv } from "./client.js";
+import {
+  FrappeClient,
+  FRAPPE_PROVISIONING_TOKEN_HEADER,
+  createFrappeClientFromEnv,
+} from "./client.js";
 import { buildFrappeMethodUrl, joinFrappeBaseUrl } from "./url.js";
 
 const TEST_TOKEN = "test-provisioning-token-16chars";
@@ -28,10 +32,8 @@ test("buildFrappeMethodUrl encodes method segment and joins base", () => {
   );
 });
 
-test("buildAuthorizationHeader uses Bearer provisioning token (not legacy token key:secret)", () => {
-  assert.equal(FrappeClient.buildAuthorizationHeader("my-secret-token-16"), "Bearer my-secret-token-16");
-  assert.match(FrappeClient.buildAuthorizationHeader("x".repeat(16)), /^Bearer /);
-  assert.doesNotMatch(FrappeClient.buildAuthorizationHeader("x".repeat(16)), /^token /);
+test("provisioning header name is X-Provisioning-Token (not Authorization Bearer or legacy token key:secret)", () => {
+  assert.equal(FRAPPE_PROVISIONING_TOKEN_HEADER, "X-Provisioning-Token");
 });
 
 test("createFrappeClientFromEnv throws when ERP_BASE_URL missing", () => {
@@ -58,11 +60,12 @@ test("createFrappeClientFromEnv throws when ERP_PROVISIONING_TOKEN missing", () 
   );
 });
 
-test("callMethod POST sends JSON, correct path, and Bearer Authorization header", async () => {
+test("callMethod POST sends JSON, correct path, and X-Provisioning-Token (no Authorization Bearer)", async () => {
   const server = http.createServer((req, res) => {
     assert.equal(req.method, "POST");
     assert.match(req.url ?? "", /^\/api\/method\/provisioning_api\.api\.provisioning\.create_site$/);
-    assert.equal(req.headers.authorization, `Bearer ${TEST_TOKEN}`);
+    assert.equal(req.headers["x-provisioning-token"], TEST_TOKEN);
+    assert.equal(req.headers.authorization, undefined);
     let buf = "";
     req.on("data", (c) => {
       buf += c;
@@ -233,11 +236,12 @@ test("request times out when server is slow", async () => {
   }
 });
 
-test("ping uses GET /api/method/frappe.ping with Bearer auth", async () => {
+test("ping uses GET /api/method/frappe.ping with X-Provisioning-Token (no Authorization Bearer)", async () => {
   const server = http.createServer((req, res) => {
     assert.equal(req.method, "GET");
     assert.match(req.url ?? "", /^\/api\/method\/frappe\.ping$/);
-    assert.equal(req.headers.authorization, `Bearer ${TEST_TOKEN}`);
+    assert.equal(req.headers["x-provisioning-token"], TEST_TOKEN);
+    assert.equal(req.headers.authorization, undefined);
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ message: "pong" }));
   });
