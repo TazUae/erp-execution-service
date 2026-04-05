@@ -1,7 +1,6 @@
 # Dokploy: file must exist at repo root. Env vars are injected by Dokploy / .env (no :? here — avoids compose parse issues).
 #
-# Bench-side executor: this image is Node-only. Required secrets include ERP_DB_ROOT_PASSWORD.
-# Mount the host bench tree at ERP_BENCH_PATH or run on the bench host — see README.md.
+# HTTP-only ERP integration (see README migration note). No bench or local DB coupling.
 
 services:
   erp-execution-service:
@@ -12,9 +11,6 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-8790}
       ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN}
-      ERP_ADMIN_PASSWORD: ${ERP_ADMIN_PASSWORD}
-      ERP_DB_ROOT_PASSWORD: ${ERP_DB_ROOT_PASSWORD}
-      ERP_BENCH_PATH: ${ERP_BENCH_PATH:-/home/frappe/frappe-bench}
-      ERP_DB_HOST: ${ERP_DB_HOST:-db}
       ERP_COMMAND_TIMEOUT_MS: ${ERP_COMMAND_TIMEOUT_MS:-120000}
+      ERP_BASE_URL: ${ERP_BASE_URL:-}
     restart: unless-stopped

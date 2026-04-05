@@ -1,5 +1,4 @@
 import { loadEnv, EnvValidationError } from "./config/env.js";
-import { validateBenchRuntime, BenchRuntimeValidationError } from "./config/bench-runtime.js";
 import { createLogger } from "./lib/logger.js";
 import { buildApp } from "./app.js";
 
@@ -25,19 +24,6 @@ async function main() {
       console.error(error);
     }
     process.exit(1);
-  }
-
-  if (process.env.ERP_SKIP_BENCH_RUNTIME_CHECK !== "true") {
-    try {
-      await validateBenchRuntime(env);
-    } catch (error) {
-      if (error instanceof BenchRuntimeValidationError) {
-        logStartupFailure({ code: "BENCH_RUNTIME_INVALID", issues: error.issues });
-      } else {
-        console.error(error);
-      }
-      process.exit(1);
-    }
   }
 
   const logger = createLogger(env);

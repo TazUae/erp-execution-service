@@ -3,16 +3,12 @@
 # Build from this repository root (standalone erp-execution-service):
 #   docker build -t erp-execution-service:latest .
 #
-# Node-only runtime image: does NOT include Frappe bench, Python, or MariaDB.
-# Run on a host with bench, or mount ERP_BENCH_PATH and supply bench in the image.
-#
-# `erp-utils` is file:./packages/erp-utils — keep packages/erp-utils next to node_modules.
+# Node-only runtime image. ERP work will be delegated to an HTTP API (ERP_BASE_URL) in a follow-up.
 
 FROM node:20-bookworm AS builder
 WORKDIR /build
 
 COPY package.json package-lock.json ./
-COPY packages/erp-utils ./packages/erp-utils
 COPY tsconfig.json ./
 COPY src ./src
 
@@ -23,8 +19,6 @@ FROM node:20-bookworm
 WORKDIR /opt/erp-execution-service
 
 COPY --from=builder /build/package.json /build/package-lock.json ./
-# Must match npm link target for file:./packages/erp-utils (../packages/erp-utils from node_modules/)
-COPY --from=builder /build/packages/erp-utils ./packages/erp-utils
 COPY --from=builder /build/node_modules ./node_modules
 COPY --from=builder /build/dist ./dist
 

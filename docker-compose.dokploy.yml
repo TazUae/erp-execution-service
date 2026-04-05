@@ -1,5 +1,5 @@
 # Optional overlay for Dokploy: init, expose (behind reverse proxy), attach to Dokploy's external network.
-# Same env contract as docker-compose.yml (bench-side).
+# Same env contract as docker-compose.yml (HTTP-only ERP integration).
 #
 # Use when you need `expose` + `dokploy-network` instead of publishing host ports.
 # If you must join a second Docker network (e.g. shared ERP), duplicate the service `networks` entry and add a `networks:` block locally or extend this file.
@@ -15,11 +15,8 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: ${PORT:-8790}
       ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN}
-      ERP_ADMIN_PASSWORD: ${ERP_ADMIN_PASSWORD}
-      ERP_DB_ROOT_PASSWORD: ${ERP_DB_ROOT_PASSWORD}
-      ERP_BENCH_PATH: ${ERP_BENCH_PATH:-/home/frappe/frappe-bench}
-      ERP_DB_HOST: ${ERP_DB_HOST:-db}
       ERP_COMMAND_TIMEOUT_MS: ${ERP_COMMAND_TIMEOUT_MS:-120000}
+      ERP_BASE_URL: ${ERP_BASE_URL:-}
     expose:
       - "${PORT:-8790}"
     networks:

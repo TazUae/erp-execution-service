@@ -12,9 +12,6 @@ function testEnv() {
     NODE_ENV: "test",
     PORT: "8791",
     ERP_REMOTE_TOKEN: "test-token-16chars-min",
-    ERP_ADMIN_PASSWORD: "password12",
-    ERP_DB_ROOT_PASSWORD: "dbroot-pass",
-    ERP_BENCH_PATH: "/tmp",
     ERP_COMMAND_TIMEOUT_MS: "5000",
   });
 }
