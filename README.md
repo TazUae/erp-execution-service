@@ -67,11 +67,10 @@ Values match `src/config/env.ts`.
 
 ### Docker / Dokploy
 
-- This repo is **standalone**: `Dockerfile` and **`docker-compose.yml`** at repo root (for Dokploy compose deployments).
+- **Compose file path:** set to **`docker-compose.yml`** (repo root). If Dokploy clones into a subfolder, use **`code/docker-compose.yml`** (or whatever prefix matches your checkout).
 - Build: `docker build -t erp-execution-service .` from the repo root.
-- Compose: set `ERP_REMOTE_TOKEN`, `ERP_ADMIN_PASSWORD`, `ERP_DB_ROOT_PASSWORD`, and mount or align `ERP_BENCH_PATH` with a real bench tree.
-- **If Dokploy reports “Compose file not found”:** set **Compose file path** to `docker-compose.yml`. If your Dokploy version clones into a subfolder, try `code/docker-compose.yml`. Ensure the **branch** is `main` and redeploy after pushing.
-- Identical stacks may also exist as `compose.yml`, `compose.yaml`, or `docker-compose.yaml` for tooling that prefers those names.
+- Secrets / env: `ERP_REMOTE_TOKEN`, `ERP_ADMIN_PASSWORD`, `ERP_DB_ROOT_PASSWORD`, and mount or align `ERP_BENCH_PATH` with a real bench tree.
+- Optional: **`docker-compose.dokploy.yml`** — same bench env, with `expose` + external `dokploy-network` (no host `ports:`). Use only if that matches your Dokploy networking; otherwise stay on `docker-compose.yml`.
 
 ## Related documentation
 

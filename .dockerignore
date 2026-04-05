@@ -5,6 +5,5 @@ packages/erp-utils/dist
 .git
 .env
 .env.*
-*.md
 .vscode
 npm-debug.log*

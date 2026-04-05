@@ -1,5 +1,8 @@
-# Optional: same as docker-compose.yml with external networks (when used from monorepo path).
-# For github.com/TazUae/erp-execution-service use docker-compose.yml at repo root.
+# Optional overlay for Dokploy: init, expose (behind reverse proxy), attach to Dokploy's external network.
+# Same env contract as docker-compose.yml (bench-side).
+#
+# Use when you need `expose` + `dokploy-network` instead of publishing host ports.
+# If you must join a second Docker network (e.g. shared ERP), duplicate the service `networks` entry and add a `networks:` block locally or extend this file.
 
 name: erp-execution-service
 
@@ -13,17 +16,15 @@ services:
       PORT: ${PORT:-8790}
       ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN}
       ERP_ADMIN_PASSWORD: ${ERP_ADMIN_PASSWORD}
-      ERP_BASE_URL: ${ERP_BASE_URL:-http://axis-erp-backend:8000}
+      ERP_DB_ROOT_PASSWORD: ${ERP_DB_ROOT_PASSWORD}
+      ERP_BENCH_PATH: ${ERP_BENCH_PATH:-/home/frappe/frappe-bench}
+      ERP_DB_HOST: ${ERP_DB_HOST:-db}
       ERP_COMMAND_TIMEOUT_MS: ${ERP_COMMAND_TIMEOUT_MS:-120000}
     expose:
       - "${PORT:-8790}"
     networks:
       - dokploy-network
-      - axis-erp-internal
 
 networks:
   dokploy-network:
-    external: true
-  axis-erp-internal:
-    name: axiserp-erpnext-pnzjyk_axis-erp-internal
     external: true
