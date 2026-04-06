@@ -18,6 +18,9 @@ dev = ["pytest>=7"]
 where = ["."]
 include = ["provisioning_api*"]
 
+[tool.setuptools.package-data]
+provisioning_api = ["modules.txt"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

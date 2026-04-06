@@ -1,0 +1,2 @@
+include README.md license.txt pyproject.toml
+recursive-include provisioning_api *.py *.txt

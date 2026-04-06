@@ -1,44 +1,43 @@
 """
-Authentication helpers for the provisioning API.
+Provisioning API authentication: ``X-Provisioning-Token`` only (Guest-safe).
 
-Frappe already authenticates ``Authorization: token <api_key>:<api_secret>`` on API routes.
-This module rejects unauthenticated **Guest** sessions and optionally enforces an extra
-shared secret when configured (defense in depth — does not replace token auth).
+Compared to ``provisioning_api_token`` from merged site / common site config (``frappe.conf``).
+No Frappe session or API key requirement for these RPCs.
 """
 
 from __future__ import annotations
 
+import hmac
+
 import frappe
 from frappe import _
 
+_PROVISIONING_TOKEN_HEADER = "X-Provisioning-Token"
+_CONFIG_KEY = "provisioning_api_token"
 
-def require_api_auth() -> None:
+
+def verify_provisioning_token() -> None:
     """
-    Ensure the request is not an unauthenticated Guest session.
+    Ensure the request carries the configured provisioning shared secret (constant-time).
 
-    After successful Frappe API key / session auth, ``frappe.session.user`` is not ``Guest``.
+    Raises ``frappe.AuthenticationError`` when the token is missing, wrong, or unset in config.
     """
-    if frappe.session.user == "Guest":
-        frappe.throw(_("Authentication required"), frappe.AuthenticationError)
-
-
-def require_optional_internal_secret() -> None:
-    """
-    If ``provisioning_api_internal_secret`` is set in site config, require matching header.
-
-    Header: ``X-Provisioning-Internal-Secret: <secret>``
-
-    When the secret is **not** configured, this is a no-op so standard token auth is unchanged.
-    """
-    secret = frappe.conf.get("provisioning_api_internal_secret")
-    if not secret:
-        return
-    header = frappe.get_request_header("X-Provisioning-Internal-Secret")
-    if not header or header != secret:
-        frappe.throw(_("Invalid or missing internal provisioning secret"), frappe.AuthenticationError)
+    expected = frappe.conf.get(_CONFIG_KEY)
+    if not expected:
+        frappe.throw(
+            _("provisioning_api_token is not configured"),
+            frappe.AuthenticationError,
+        )
+    exp_bytes = str(expected).encode("utf-8")
+    got_raw = frappe.get_request_header(_PROVISIONING_TOKEN_HEADER)
+    got_bytes = got_raw.encode("utf-8") if got_raw else b""
+    if len(got_bytes) != len(exp_bytes) or not hmac.compare_digest(got_bytes, exp_bytes):
+        frappe.throw(
+            _("Invalid or missing provisioning token"),
+            frappe.AuthenticationError,
+        )
 
 
 def require_provisioning_access() -> None:
-    """Apply Guest check, optional internal secret, then allow the handler to proceed."""
-    require_api_auth()
-    require_optional_internal_secret()
+    """Enforce provisioning token auth (for use at the start of whitelisted handlers)."""
+    verify_provisioning_token()
