@@ -4,7 +4,7 @@
 # If you merge with `docker-compose.yml`, `env_file: !reset []` clears the base `env_file` so `.env` is not loaded.
 #
 # The service joins:
-# - dokploy-network — reverse proxy / platform routing
+# - dokploy-network — reverse proxy / platform routing (alias erp-execution-service for peers on this network)
 # - axiserp-erpnext-pnzjyk_axis-erp-internal — ERPNext backend (axis-erp-backend:8000)
 
 name: erp-execution-service
@@ -32,8 +32,10 @@ services:
     expose:
       - "${PORT:-8790}"
     networks:
-      - dokploy-network
-      - axis-erp-internal
+      dokploy-network:
+        aliases:
+          - erp-execution-service
+      axis-erp-internal: {}
 
 networks:
   dokploy-network:

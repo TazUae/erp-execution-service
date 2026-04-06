@@ -52,7 +52,7 @@ For outbound calls to ERPNext, this container must share a Docker network with t
 | **`ERP_SITE_HOST`** | Public site hostname Frappe expects on **`Host`** when the request has no site in the body (e.g. **`frappe.ping`**); must match a site name your bench knows |
 | **Provisioning token header** | `ERP_PROVISIONING_TOKEN` must match **`provisioning_api_token`** in ERP **`sites/common_site_config.json`** (sent as **`X-Provisioning-Token`**) |
 
-The tracked **`docker-compose.yml`** and **`docker-compose.dokploy.yml`** attach **`erp-execution-service`** to that external network **in addition to** this project’s default network (and, for Dokploy, `dokploy-network`). After deploy, **redeploy** the service, **verify** the container is on `axiserp-erpnext-pnzjyk_axis-erp-internal`, then run your **live connectivity checks** (e.g. outbound ping / lifecycle against ERP). Smoke-test automation is out of scope for this repo step.
+The tracked **`docker-compose.yml`** and **`docker-compose.dokploy.yml`** attach **`erp-execution-service`** to that external network **in addition to** this project’s default network (and, for Dokploy, `dokploy-network`). **`docker-compose.dokploy.yml`** sets network alias **`erp-execution-service`** on **`dokploy-network`** so peers (for example **`provisioning-agent`**) can resolve **`http://erp-execution-service:<PORT>`** for **`ERP_REMOTE_BASE_URL`**. After deploy, **redeploy** the service, **verify** the container is on `axiserp-erpnext-pnzjyk_axis-erp-internal`, then run your **live connectivity checks** (e.g. outbound ping / lifecycle against ERP). Smoke-test automation is out of scope for this repo step.
 
 ## Role
 
