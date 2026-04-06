@@ -1,5 +1,7 @@
-# Optional overlay for Dokploy: init, expose (behind reverse proxy), attach to Dokploy's external network.
-# Same env contract as docker-compose.yml (HTTP-only ERP integration).
+# Dokploy / production overlay: runtime values come from the Dokploy environment (or host env at deploy time).
+# Do not rely on a checked-in `.env` file for secrets or production configuration.
+#
+# If you merge with `docker-compose.yml`, `env_file: !reset []` clears the base `env_file` so `.env` is not loaded.
 #
 # The service joins:
 # - dokploy-network — reverse proxy / platform routing
@@ -12,10 +14,22 @@ services:
     build: .
     init: true
     restart: unless-stopped
-    env_file:
-      - .env
+    env_file: !reset []
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: ${PORT:-8790}
+      ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN}
+      ERP_COMMAND_TIMEOUT_MS: ${ERP_COMMAND_TIMEOUT_MS:-30000}
+      ERP_BASE_URL: ${ERP_BASE_URL:-}
+      ERP_PROVISIONING_TOKEN: ${ERP_PROVISIONING_TOKEN:-}
+      ERP_METHOD_CREATE_SITE: ${ERP_METHOD_CREATE_SITE:-provisioning_api.api.provisioning.create_site}
+      ERP_METHOD_READ_SITE_DB_NAME: ${ERP_METHOD_READ_SITE_DB_NAME:-provisioning_api.api.provisioning.read_site_db_name}
+      ERP_METHOD_INSTALL_ERP: ${ERP_METHOD_INSTALL_ERP:-provisioning_api.api.provisioning.install_erp}
+      ERP_METHOD_ENABLE_SCHEDULER: ${ERP_METHOD_ENABLE_SCHEDULER:-provisioning_api.api.provisioning.enable_scheduler}
+      ERP_METHOD_ADD_DOMAIN: ${ERP_METHOD_ADD_DOMAIN:-provisioning_api.api.provisioning.add_domain}
+      ERP_METHOD_CREATE_API_USER: ${ERP_METHOD_CREATE_API_USER:-provisioning_api.api.provisioning.create_api_user}
     expose:
-      - "${PORT}"
+      - "${PORT:-8790}"
     networks:
       - dokploy-network
       - axis-erp-internal
