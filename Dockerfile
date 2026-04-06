@@ -24,9 +24,6 @@ COPY --from=builder /build/dist ./dist
 
 USER node
 
-ENV NODE_ENV=production
-ENV PORT=8790
-
 EXPOSE 8790
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

@@ -12,15 +12,10 @@ services:
     build: .
     init: true
     restart: unless-stopped
-    environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      PORT: ${PORT:-8790}
-      ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN}
-      ERP_COMMAND_TIMEOUT_MS: ${ERP_COMMAND_TIMEOUT_MS:-30000}
-      ERP_BASE_URL: ${ERP_BASE_URL:-}
-      ERP_PROVISIONING_TOKEN: ${ERP_PROVISIONING_TOKEN:-}
+    env_file:
+      - .env
     expose:
-      - "${PORT:-8790}"
+      - "${PORT}"
     networks:
       - dokploy-network
       - axis-erp-internal

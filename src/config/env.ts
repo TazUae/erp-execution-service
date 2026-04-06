@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-/** HTTP-only ERP integration: inbound Bearer auth; outbound `X-Provisioning-Token` to Frappe provisioning API (see `lib/frappe-client/client.ts`). */
+/**
+ * HTTP-only ERP integration: inbound Bearer auth; outbound `X-Provisioning-Token` to Frappe provisioning API (see `lib/frappe-client/client.ts`).
+ *
+ * Keys here must stay in sync with `.env.example` (and the committed `.env` template): NODE_ENV, PORT,
+ * ERP_REMOTE_TOKEN, ERP_COMMAND_TIMEOUT_MS, ERP_BASE_URL, ERP_PROVISIONING_TOKEN, ERP_METHOD_*.
+ */
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(8790),

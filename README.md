@@ -131,11 +131,17 @@ Values match `src/config/env.ts`. See also **`.env.example`**.
 - Ensure network reachability from this container/process to `ERP_BASE_URL` (DNS, TLS, firewall).
 - Configure **`ERP_PROVISIONING_TOKEN`** to the same value as **`provisioning_api_token`** on the ERP bench (`sites/common_site_config.json`).
 
+### Environment and configuration
+
+- **Tracked templates:** **`.env.example`** documents every variable validated in **`src/config/env.ts`**. The committed **`.env`** file lists the same keys with **non-production placeholder values** so `git pull` always restores a complete variable list; adjust values per environment on the server or in CI.
+- **Docker Compose:** both **`docker-compose.yml`** and **`docker-compose.dokploy.yml`** use **`env_file: [.env]`** and do **not** embed an `environment:` block. Dokploy (or your host) can still override values by merging or replacing `.env` after checkout, or by exporting variables before `docker compose` (Compose interpolates `${PORT}` etc. from the project `.env`).
+- **Overrides:** use **`.env.local`**, **`.env.production`**, or **`.env.secrets`** for machine-specific or secret values (these filenames are **gitignored**). Never commit real production secrets into **`.env`**.
+
 ### Docker / Dokploy
 
 - **Compose file path:** set to **`docker-compose.yml`** (repo root). If Dokploy clones into a subfolder, use **`code/docker-compose.yml`** (or whatever prefix matches your checkout).
 - Build: `docker build -t erp-execution-service .` from the repo root.
-- Secrets: `ERP_REMOTE_TOKEN` (inbound); for outbound ERP, `ERP_BASE_URL` and `ERP_PROVISIONING_TOKEN` when enabling HTTP calls.
+- **Variables:** inbound **`ERP_REMOTE_TOKEN`**; for outbound ERP, **`ERP_BASE_URL`**, **`ERP_PROVISIONING_TOKEN`**, and optional **`ERP_METHOD_*`** overrides — see **`.env.example`** and the table above.
 - **Networks:** compose files declare external network **`axiserp-erpnext-pnzjyk_axis-erp-internal`** so the service can reach **`axis-erp-backend:8000`**. Ensure that network exists (created by the ERPNext stack) before starting this service.
 - Optional: **`docker-compose.dokploy.yml`** — `expose` + **`dokploy-network`** + the same ERP internal network. Use when that matches your Dokploy networking; otherwise stay on `docker-compose.yml`.
 

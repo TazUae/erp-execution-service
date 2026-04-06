@@ -1,4 +1,4 @@
-# Dokploy: file must exist at repo root. Env vars are injected by Dokploy / .env (no :? here — avoids compose parse issues).
+# Compose loads `.env` for variable interpolation and passes the same file into the container via `env_file`.
 #
 # HTTP-only ERP integration (see README migration note). No bench or local DB coupling.
 #
@@ -9,14 +9,9 @@ services:
   erp-execution-service:
     build: .
     ports:
-      - "${PORT:-8790}:8790"
-    environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      PORT: ${PORT:-8790}
-      ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN}
-      ERP_COMMAND_TIMEOUT_MS: ${ERP_COMMAND_TIMEOUT_MS:-30000}
-      ERP_BASE_URL: ${ERP_BASE_URL:-}
-      ERP_PROVISIONING_TOKEN: ${ERP_PROVISIONING_TOKEN:-}
+      - "${PORT}:${PORT}"
+    env_file:
+      - .env
     restart: unless-stopped
     networks:
       - default
