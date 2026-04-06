@@ -154,6 +154,25 @@ export class ErpExecutionAdapter implements LifecycleAdapter {
       };
     }
 
+    if (request.action === "readSiteDbName") {
+      const method = this.methodForAction(request.action);
+      const payload = this.payloadForAction(request) as { site_name: string };
+      log.debug({ action: request.action, method }, "calling Frappe read_site_db_name");
+      const result = await client.callReadSiteDbName(method, payload);
+      const durationMs = Date.now() - started;
+      if (!result.ok) {
+        return {
+          ok: false,
+          failure: mapFrappeErrorToRemoteFailure(result.error.code, result.error.message),
+        };
+      }
+      return {
+        ok: true,
+        durationMs,
+        metadata: { db_name: result.dbName },
+      };
+    }
+
     const method = this.methodForAction(request.action);
     const payload = this.payloadForAction(request);
     log.debug({ action: request.action, method }, "calling Frappe method");

@@ -21,6 +21,13 @@ export function mapFrappeErrorToRemoteFailure(frappeCode: FrappeErrorCode, messa
         retryable: true,
         details: message,
       };
+    case "SITE_NOT_FOUND":
+      return {
+        code: "SITE_NOT_FOUND",
+        message: "Site not found on ERP bench",
+        retryable: false,
+        details: message,
+      };
     case "TIMEOUT":
       return {
         code: "ERP_TIMEOUT",

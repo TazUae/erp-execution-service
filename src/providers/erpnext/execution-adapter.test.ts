@@ -4,7 +4,7 @@ import { ErpExecutionAdapter } from "./execution-adapter.js";
 import { loadEnv, resetEnvCacheForTests } from "../../config/env.js";
 import { createLogger } from "../../lib/logger.js";
 import type { FrappeClient } from "../../lib/frappe-client/client.js";
-import type { FrappeResponse } from "../../lib/frappe-client/types.js";
+import type { FrappeResponse, ReadSiteDbNameResult } from "../../lib/frappe-client/types.js";
 
 function baseEnv(overrides?: Record<string, string | undefined>) {
   return loadEnv({
@@ -20,10 +20,18 @@ function baseEnv(overrides?: Record<string, string | undefined>) {
 
 function makeMockClient(handlers: {
   callMethod?: (method: string, payload?: unknown) => Promise<FrappeResponse>;
+  callReadSiteDbName?: (method: string, payload: { site_name: string }) => Promise<ReadSiteDbNameResult>;
   ping?: () => Promise<FrappeResponse>;
 }): FrappeClient {
+  const callMethod = handlers.callMethod ?? (async () => ({ ok: true, data: {} }));
   return {
-    callMethod: handlers.callMethod ?? (async () => ({ ok: true, data: {} })),
+    callMethod,
+    callReadSiteDbName:
+      handlers.callReadSiteDbName ??
+      (async () => ({
+        ok: false,
+        error: { code: "INVALID_RESPONSE", message: "callReadSiteDbName not stubbed in test mock" },
+      })),
     ping: handlers.ping ?? (async () => ({ ok: true, data: "pong" })),
   } as FrappeClient;
 }
@@ -187,6 +195,72 @@ test("successful Frappe response maps to ok with metadata", async () => {
     assert.ok(r.metadata);
     assert.equal(r.metadata?.status, "created");
     assert.equal(r.metadata?.count, 1);
+  }
+});
+
+test("readSiteDbName uses callReadSiteDbName and returns db_name metadata on success", async () => {
+  const env = baseEnv();
+  const logger = createLogger(env);
+  let seenMethod: string | undefined;
+  let seenPayload: unknown;
+  const client = makeMockClient({
+    async callReadSiteDbName(method, payload) {
+      seenMethod = method;
+      seenPayload = payload;
+      return { ok: true, dbName: "_fe883896178c6f75" };
+    },
+  });
+  const adapter = new ErpExecutionAdapter(env, logger, { frappeClient: client });
+  const r = await adapter.run({
+    action: "readSiteDbName",
+    payload: { site: "valid-site" },
+  });
+  assert.equal(r.ok, true);
+  assert.equal(seenMethod, env.ERP_METHOD_READ_SITE_DB_NAME);
+  assert.deepEqual(seenPayload, { site_name: "valid-site" });
+  if (r.ok) {
+    assert.equal(r.metadata?.db_name, "_fe883896178c6f75");
+  }
+});
+
+test("readSiteDbName maps SITE_NOT_FOUND from client", async () => {
+  const env = baseEnv();
+  const logger = createLogger(env);
+  const client = makeMockClient({
+    async callReadSiteDbName() {
+      return { ok: false, error: { code: "SITE_NOT_FOUND", message: "site directory does not exist" } };
+    },
+  });
+  const adapter = new ErpExecutionAdapter(env, logger, { frappeClient: client });
+  const r = await adapter.run({
+    action: "readSiteDbName",
+    payload: { site: "missing-site" },
+  });
+  assert.equal(r.ok, false);
+  if (!r.ok) {
+    assert.equal(r.failure.code, "SITE_NOT_FOUND");
+    assert.equal(r.failure.retryable, false);
+    assert.match(r.failure.details ?? "", /site directory does not exist/);
+  }
+});
+
+test("readSiteDbName maps AUTH_ERROR from client", async () => {
+  const env = baseEnv();
+  const logger = createLogger(env);
+  const client = makeMockClient({
+    async callReadSiteDbName() {
+      return { ok: false, error: { code: "AUTH_ERROR", message: "Invalid or missing provisioning token" } };
+    },
+  });
+  const adapter = new ErpExecutionAdapter(env, logger, { frappeClient: client });
+  const r = await adapter.run({
+    action: "readSiteDbName",
+    payload: { site: "valid-site" },
+  });
+  assert.equal(r.ok, false);
+  if (!r.ok) {
+    assert.equal(r.failure.code, "ERP_COMMAND_FAILED");
+    assert.equal(r.failure.retryable, false);
   }
 });
 

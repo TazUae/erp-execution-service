@@ -8,6 +8,7 @@ export function mapFailureCodeToHttpStatus(code: RemoteExecutionFailureCode): nu
     ERP_VALIDATION_FAILED: 422,
     ERP_PARTIAL_SUCCESS: 500,
     SITE_ALREADY_EXISTS: 409,
+    SITE_NOT_FOUND: 404,
     NOT_IMPLEMENTED: 501,
   };
   return map[code];

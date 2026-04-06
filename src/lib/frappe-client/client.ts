@@ -1,6 +1,6 @@
 import type { Env } from "../../config/env.js";
 import { errResult, safeExcMessage, truncateSafeSnippet } from "./errors.js";
-import type { FrappeRawJson, FrappeResponse } from "./types.js";
+import type { FrappeRawJson, FrappeResponse, ReadSiteDbNameResult } from "./types.js";
 import { buildFrappeMethodUrl, joinFrappeBaseUrl } from "./url.js";
 
 /** Outbound provisioning auth header — not `Authorization: Bearer`, which Frappe handles as OAuth before app code runs. */
@@ -23,6 +23,49 @@ const RETRYABLE_NETWORK_CODES = new Set([
   "UND_ERR_CONNECT_TIMEOUT",
 ]);
 
+function parseJsonBody(bodyText: string): { parsed: FrappeRawJson | undefined; parseFailed: boolean } {
+  const trimmed = bodyText.trim();
+  if (trimmed === "") {
+    return { parsed: undefined, parseFailed: false };
+  }
+  try {
+    return { parsed: JSON.parse(bodyText) as FrappeRawJson, parseFailed: false };
+  } catch {
+    return { parsed: undefined, parseFailed: true };
+  }
+}
+
+/** Live provisioning RPC envelope under Frappe's top-level ``message`` field. */
+function isReadSiteDbNameSuccessMessage(msg: unknown): msg is { ok: true; data: { db_name: string } } {
+  if (typeof msg !== "object" || msg === null || Array.isArray(msg)) {
+    return false;
+  }
+  const o = msg as { ok?: unknown; data?: unknown };
+  if (o.ok !== true) {
+    return false;
+  }
+  if (typeof o.data !== "object" || o.data === null || Array.isArray(o.data)) {
+    return false;
+  }
+  const db = (o.data as { db_name?: unknown }).db_name;
+  return typeof db === "string" && db.length > 0;
+}
+
+function provisioningSiteNotFoundFrom404(parsed: FrappeRawJson | undefined): { message: string } | null {
+  const msg = parsed?.message;
+  if (typeof msg !== "object" || msg === null || Array.isArray(msg)) {
+    return null;
+  }
+  const err = (msg as { error?: { code?: unknown; message?: unknown } }).error;
+  if (!err || err.code !== "SITE_NOT_FOUND") {
+    return null;
+  }
+  if (typeof err.message !== "string" || !err.message.trim()) {
+    return { message: "SITE_NOT_FOUND" };
+  }
+  return { message: truncateSafeSnippet(err.message) };
+}
+
 export class FrappeClient {
   constructor(private readonly options: FrappeClientOptions) {}
 
@@ -37,6 +80,22 @@ export class FrappeClient {
   }
 
   /**
+   * POST ``read_site_db_name`` and parse the live Frappe envelope:
+   * ``{ message: { ok: true, data: { db_name } } }`` on success,
+   * ``{ message: { ok: false, error: { code: \"SITE_NOT_FOUND\", ... } } }`` on HTTP 404.
+   */
+  async callReadSiteDbName(method: string, payload: { site_name: string }): Promise<ReadSiteDbNameResult> {
+    const url = buildFrappeMethodUrl(this.options.baseUrl, method);
+    try {
+      const { status, bodyText } = await this.rawHttp("POST", url, payload);
+      const { parsed, parseFailed } = parseJsonBody(bodyText);
+      return this.normalizeReadSiteDbNameResponse(status, parsed, bodyText, parseFailed);
+    } catch (error) {
+      return this.mapReadSiteDbNameFetchFailure(error, this.options.timeoutMs);
+    }
+  }
+
+  /**
    * GET `/api/method/frappe.ping` — lightweight upstream reachability check.
    */
   async ping(): Promise<FrappeResponse> {
@@ -44,11 +103,21 @@ export class FrappeClient {
     return this.request("GET", url, undefined);
   }
 
-  private async request(
+  private async request(method: "GET" | "POST", url: string, jsonBody: unknown | undefined): Promise<FrappeResponse> {
+    try {
+      const { status, bodyText } = await this.rawHttp(method, url, jsonBody);
+      const { parsed, parseFailed } = parseJsonBody(bodyText);
+      return this.normalizeResponse(status, parsed, bodyText, parseFailed);
+    } catch (error) {
+      return this.mapFetchFailure(error, this.options.timeoutMs);
+    }
+  }
+
+  private async rawHttp(
     method: "GET" | "POST",
     url: string,
     jsonBody: unknown | undefined
-  ): Promise<FrappeResponse> {
+  ): Promise<{ status: number; bodyText: string }> {
     const controller = new AbortController();
     const timeoutMs = this.options.timeoutMs;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -69,28 +138,98 @@ export class FrappeClient {
         signal: controller.signal,
       });
 
-      const text = await res.text();
-      return this.normalizeResponse(res.status, text);
-    } catch (error) {
-      return this.mapFetchFailure(error, timeoutMs);
+      const bodyText = await res.text();
+      return { status: res.status, bodyText };
     } finally {
       clearTimeout(timer);
     }
   }
 
-  private normalizeResponse(status: number, bodyText: string): FrappeResponse {
-    const trimmed = bodyText.trim();
-    let parsed: FrappeRawJson | undefined;
-    let parseFailed = false;
-    if (trimmed !== "") {
-      try {
-        parsed = JSON.parse(bodyText) as FrappeRawJson;
-      } catch {
-        parseFailed = true;
-        parsed = undefined;
-      }
+  private normalizeReadSiteDbNameResponse(
+    status: number,
+    parsed: FrappeRawJson | undefined,
+    bodyText: string,
+    parseFailed: boolean
+  ): ReadSiteDbNameResult {
+    if (status >= 200 && status < 300 && parseFailed) {
+      return { ok: false, error: { code: "INVALID_RESPONSE", message: "Upstream returned non-JSON body" } };
     }
 
+    if (status === 401 || status === 403) {
+      return {
+        ok: false,
+        error: {
+          code: "AUTH_ERROR",
+          message: this.httpErrorMessage(parsed, bodyText, "Upstream rejected credentials"),
+        },
+      };
+    }
+
+    if (status === 404) {
+      const snf = provisioningSiteNotFoundFrom404(parsed);
+      if (snf) {
+        return { ok: false, error: { code: "SITE_NOT_FOUND", message: snf.message } };
+      }
+      return {
+        ok: false,
+        error: {
+          code: "METHOD_NOT_FOUND",
+          message: this.httpErrorMessage(parsed, bodyText, "Frappe method or route not found"),
+        },
+      };
+    }
+
+    if (status === 408) {
+      return { ok: false, error: { code: "TIMEOUT", message: "Request timed out (HTTP 408)" } };
+    }
+
+    if (status >= 200 && status < 300) {
+      if (parsed && this.hasExc(parsed)) {
+        return { ok: false, error: { code: "ERP_APPLICATION_ERROR", message: safeExcMessage(parsed.exc) } };
+      }
+      const msg = parsed?.message;
+      if (isReadSiteDbNameSuccessMessage(msg)) {
+        return { ok: true, dbName: msg.data.db_name };
+      }
+      return {
+        ok: false,
+        error: {
+          code: "INVALID_RESPONSE",
+          message:
+            "read_site_db_name: expected message.ok true and message.data.db_name (string) on HTTP 200",
+        },
+      };
+    }
+
+    if (parsed && this.hasExc(parsed)) {
+      return { ok: false, error: { code: "ERP_APPLICATION_ERROR", message: safeExcMessage(parsed.exc) } };
+    }
+
+    if (status >= 500) {
+      return {
+        ok: false,
+        error: {
+          code: "UPSTREAM_HTTP_ERROR",
+          message: this.httpErrorMessage(parsed, bodyText, `Upstream server error (HTTP ${status})`),
+        },
+      };
+    }
+
+    return {
+      ok: false,
+      error: {
+        code: "UPSTREAM_HTTP_ERROR",
+        message: this.httpErrorMessage(parsed, bodyText, `Unexpected upstream response (HTTP ${status})`),
+      },
+    };
+  }
+
+  private normalizeResponse(
+    status: number,
+    parsed: FrappeRawJson | undefined,
+    bodyText: string,
+    parseFailed: boolean
+  ): FrappeResponse {
     if (status >= 200 && status < 300 && parseFailed) {
       return errResult("INVALID_RESPONSE", "Upstream returned non-JSON body");
     }
@@ -158,6 +297,14 @@ export class FrappeClient {
 
     const msg = error instanceof Error ? error.message : String(error);
     return errResult("NETWORK_ERROR", truncateSafeSnippet(msg) || "Unexpected network error");
+  }
+
+  private mapReadSiteDbNameFetchFailure(error: unknown, timeoutMs: number): ReadSiteDbNameResult {
+    const r = this.mapFetchFailure(error, timeoutMs);
+    if (!r.ok) {
+      return { ok: false, error: r.error };
+    }
+    return { ok: false, error: { code: "INVALID_RESPONSE", message: "Unexpected success after fetch failure" } };
   }
 }
 

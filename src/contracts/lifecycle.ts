@@ -91,6 +91,8 @@ export const RemoteExecutionFailureCodeSchema = z.enum([
   "ERP_VALIDATION_FAILED",
   "ERP_PARTIAL_SUCCESS",
   "SITE_ALREADY_EXISTS",
+  /** Site folder / config not present on upstream bench (provisioning ``read_site_db_name``). */
+  "SITE_NOT_FOUND",
   /** Upstream Frappe method missing or not whitelisted (HTTP 404 / METHOD_NOT_FOUND). */
   "NOT_IMPLEMENTED",
 ]);

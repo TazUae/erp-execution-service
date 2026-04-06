@@ -173,6 +173,108 @@ test("404 maps to METHOD_NOT_FOUND", async () => {
   }
 });
 
+test("callReadSiteDbName: HTTP 200 + message envelope with db_name succeeds", async () => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        message: { ok: true, data: { db_name: "_fe883896178c6f75" } },
+      })
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const addr = server.address();
+  assert.ok(addr && typeof addr === "object");
+  const port = addr.port;
+  try {
+    const client = createClient({ baseUrl: `http://127.0.0.1:${port}` });
+    const r = await client.callReadSiteDbName("provisioning_api.api.provisioning.read_site_db_name", {
+      site_name: "erp.example.com",
+    });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.dbName, "_fe883896178c6f75");
+  } finally {
+    server.close();
+    await new Promise<void>((r) => server.once("close", r));
+  }
+});
+
+test("callReadSiteDbName: HTTP 404 + SITE_NOT_FOUND in message envelope", async () => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        message: {
+          ok: false,
+          error: { code: "SITE_NOT_FOUND", message: "site directory does not exist" },
+        },
+      })
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const addr = server.address();
+  assert.ok(addr && typeof addr === "object");
+  const port = addr.port;
+  try {
+    const client = createClient({ baseUrl: `http://127.0.0.1:${port}` });
+    const r = await client.callReadSiteDbName("provisioning_api.api.provisioning.read_site_db_name", {
+      site_name: "missing.example.com",
+    });
+    assert.equal(r.ok, false);
+    if (!r.ok) {
+      assert.equal(r.error.code, "SITE_NOT_FOUND");
+      assert.match(r.error.message, /site directory does not exist/);
+    }
+  } finally {
+    server.close();
+    await new Promise<void>((r) => server.once("close", r));
+  }
+});
+
+test("callReadSiteDbName: HTTP 401 maps to AUTH_ERROR", async () => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ exc: "Auth failed" }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const addr = server.address();
+  assert.ok(addr && typeof addr === "object");
+  const port = addr.port;
+  try {
+    const client = createClient({ baseUrl: `http://127.0.0.1:${port}` });
+    const r = await client.callReadSiteDbName("provisioning_api.api.provisioning.read_site_db_name", {
+      site_name: "erp.example.com",
+    });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error.code, "AUTH_ERROR");
+  } finally {
+    server.close();
+    await new Promise<void>((r) => server.once("close", r));
+  }
+});
+
+test("callReadSiteDbName: HTTP 200 with malformed message envelope maps to INVALID_RESPONSE", async () => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ message: { ok: true, success: true } }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const addr = server.address();
+  assert.ok(addr && typeof addr === "object");
+  const port = addr.port;
+  try {
+    const client = createClient({ baseUrl: `http://127.0.0.1:${port}` });
+    const r = await client.callReadSiteDbName("provisioning_api.api.provisioning.read_site_db_name", {
+      site_name: "erp.example.com",
+    });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error.code, "INVALID_RESPONSE");
+  } finally {
+    server.close();
+    await new Promise<void>((r) => server.once("close", r));
+  }
+});
+
 test("200 with exc maps to ERP_APPLICATION_ERROR", async () => {
   const server = http.createServer((_req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
