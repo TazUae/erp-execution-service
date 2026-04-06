@@ -6,6 +6,20 @@ test.afterEach(() => {
   resetEnvCacheForTests();
 });
 
+test("ERP_BASE_URL without ERP_SITE_HOST fails validation", () => {
+  assert.throws(
+    () =>
+      loadEnv({
+        NODE_ENV: "test",
+        PORT: "8791",
+        ERP_REMOTE_TOKEN: "test-token-16chars-min",
+        ERP_COMMAND_TIMEOUT_MS: "5000",
+        ERP_BASE_URL: "http://erp.example:8000",
+      }),
+    /ERP_SITE_HOST/
+  );
+});
+
 test("default ERP_METHOD_* values use provisioning_api.api.provisioning.*", () => {
   const env = loadEnv({
     NODE_ENV: "test",

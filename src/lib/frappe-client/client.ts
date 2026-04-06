@@ -1,3 +1,5 @@
+import http from "node:http";
+import https from "node:https";
 import type { Env } from "../../config/env.js";
 import { errResult, safeExcMessage, truncateSafeSnippet } from "./errors.js";
 import type { FrappeRawJson, FrappeResponse, ReadSiteDbNameResult } from "./types.js";
@@ -11,7 +13,36 @@ export type FrappeClientOptions = {
   /** Same value as ERP `common_site_config.json` `provisioning_api_token`. */
   provisioningToken: string;
   timeoutMs: number;
+  /**
+   * HTTP `Host` for requests without a site in the JSON body (e.g. ping). Payloads with `site_name` or `site`
+   * override this per request (Frappe multi-site routing).
+   */
+  siteHostFallback: string;
 };
+
+/** Prefer `site_name`, then `site`, when present on the RPC body (snake_case from adapter or generic callers). */
+function extractSiteHostFromPayload(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return null;
+  }
+  const o = payload as Record<string, unknown>;
+  const siteName = o.site_name;
+  if (typeof siteName === "string" && siteName.trim().length > 0) {
+    return siteName.trim();
+  }
+  const site = o.site;
+  if (typeof site === "string" && site.trim().length > 0) {
+    return site.trim();
+  }
+  return null;
+}
+
+function resolveOutboundHost(payload: unknown | undefined, fallback: string): string {
+  if (payload === undefined) {
+    return fallback;
+  }
+  return extractSiteHostFromPayload(payload) ?? fallback;
+}
 
 const RETRYABLE_NETWORK_CODES = new Set([
   "ECONNREFUSED",
@@ -89,7 +120,8 @@ export class FrappeClient {
   async callMethod(method: string, payload?: unknown): Promise<FrappeResponse> {
     const url = buildFrappeMethodUrl(this.options.baseUrl, method);
     const body = payload === undefined ? {} : payload;
-    return this.request("POST", url, body);
+    const host = resolveOutboundHost(body, this.options.siteHostFallback);
+    return this.request("POST", url, body, host);
   }
 
   /**
@@ -99,8 +131,9 @@ export class FrappeClient {
    */
   async callReadSiteDbName(method: string, payload: { site_name: string }): Promise<ReadSiteDbNameResult> {
     const url = buildFrappeMethodUrl(this.options.baseUrl, method);
+    const host = resolveOutboundHost(payload, this.options.siteHostFallback);
     try {
-      const { status, bodyText } = await this.rawHttp("POST", url, payload);
+      const { status, bodyText } = await this.rawHttp("POST", url, payload, host);
       const { parsed, parseFailed } = parseJsonBody(bodyText);
       return this.normalizeReadSiteDbNameResponse(status, parsed, bodyText, parseFailed);
     } catch (error) {
@@ -113,12 +146,17 @@ export class FrappeClient {
    */
   async ping(): Promise<FrappeResponse> {
     const url = joinFrappeBaseUrl(this.options.baseUrl, "/api/method/frappe.ping");
-    return this.request("GET", url, undefined);
+    return this.request("GET", url, undefined, this.options.siteHostFallback);
   }
 
-  private async request(method: "GET" | "POST", url: string, jsonBody: unknown | undefined): Promise<FrappeResponse> {
+  private async request(
+    method: "GET" | "POST",
+    url: string,
+    jsonBody: unknown | undefined,
+    hostHeader: string
+  ): Promise<FrappeResponse> {
     try {
-      const { status, bodyText } = await this.rawHttp(method, url, jsonBody);
+      const { status, bodyText } = await this.rawHttp(method, url, jsonBody, hostHeader);
       const { parsed, parseFailed } = parseJsonBody(bodyText);
       return this.normalizeResponse(status, parsed, bodyText, parseFailed);
     } catch (error) {
@@ -126,33 +164,64 @@ export class FrappeClient {
     }
   }
 
+  /**
+   * Node's `fetch` ignores a custom `Host` header; Frappe multi-site requires it. Use `http`/`https` directly.
+   */
   private async rawHttp(
     method: "GET" | "POST",
-    url: string,
-    jsonBody: unknown | undefined
+    urlStr: string,
+    jsonBody: unknown | undefined,
+    hostHeader: string
   ): Promise<{ status: number; bodyText: string }> {
     const controller = new AbortController();
     const timeoutMs = this.options.timeoutMs;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+    const url = new URL(urlStr);
+    const isHttps = url.protocol === "https:";
+    const lib = isHttps ? https : http;
+
     const headers: Record<string, string> = {
       Accept: "application/json",
+      Host: hostHeader,
       [FRAPPE_PROVISIONING_TOKEN_HEADER]: this.options.provisioningToken,
     };
     if (method === "POST") {
       headers["Content-Type"] = "application/json";
     }
 
-    try {
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: method === "POST" ? JSON.stringify(jsonBody ?? {}) : undefined,
-        signal: controller.signal,
-      });
+    const port = url.port ? Number(url.port) : isHttps ? 443 : 80;
+    const bodyStr = method === "POST" ? JSON.stringify(jsonBody ?? {}) : undefined;
 
-      const bodyText = await res.text();
-      return { status: res.status, bodyText };
+    try {
+      const result = await new Promise<{ status: number; bodyText: string }>((resolve, reject) => {
+        const opts: http.RequestOptions = {
+          hostname: url.hostname,
+          port,
+          path: `${url.pathname}${url.search}`,
+          method,
+          headers,
+          signal: controller.signal,
+        };
+
+        const req = lib.request(opts, (res) => {
+          let buf = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk: string) => {
+            buf += chunk;
+          });
+          res.on("end", () => {
+            resolve({ status: res.statusCode ?? 0, bodyText: buf });
+          });
+        });
+
+        req.on("error", reject);
+        if (bodyStr !== undefined) {
+          req.write(bodyStr);
+        }
+        req.end();
+      });
+      return result;
     } finally {
       clearTimeout(timer);
     }
@@ -323,7 +392,7 @@ export class FrappeClient {
 }
 
 export function createFrappeClientFromEnv(
-  env: Pick<Env, "ERP_BASE_URL" | "ERP_PROVISIONING_TOKEN" | "ERP_COMMAND_TIMEOUT_MS">
+  env: Pick<Env, "ERP_BASE_URL" | "ERP_PROVISIONING_TOKEN" | "ERP_COMMAND_TIMEOUT_MS" | "ERP_SITE_HOST">
 ): FrappeClient {
   if (!env.ERP_BASE_URL) {
     throw new Error("ERP_BASE_URL is not set");
@@ -332,9 +401,14 @@ export function createFrappeClientFromEnv(
   if (!token) {
     throw new Error("ERP_PROVISIONING_TOKEN is not set");
   }
+  const siteHost = env.ERP_SITE_HOST?.trim();
+  if (!siteHost) {
+    throw new Error("ERP_SITE_HOST is not set");
+  }
   return new FrappeClient({
     baseUrl: env.ERP_BASE_URL,
     provisioningToken: token,
     timeoutMs: env.ERP_COMMAND_TIMEOUT_MS,
+    siteHostFallback: siteHost,
   });
 }

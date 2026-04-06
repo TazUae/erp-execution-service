@@ -10,11 +10,14 @@ import { buildFrappeMethodUrl, joinFrappeBaseUrl } from "./url.js";
 
 const TEST_TOKEN = "test-provisioning-token-16chars";
 
+const FALLBACK_SITE_HOST = "erp.fallback.test";
+
 function createClient(overrides?: Partial<ConstructorParameters<typeof FrappeClient>[0]>) {
   return new FrappeClient({
     baseUrl: "http://127.0.0.1:9",
     provisioningToken: TEST_TOKEN,
     timeoutMs: 5_000,
+    siteHostFallback: FALLBACK_SITE_HOST,
     ...overrides,
   });
 }
@@ -55,8 +58,22 @@ test("createFrappeClientFromEnv throws when ERP_PROVISIONING_TOKEN missing", () 
         ERP_BASE_URL: "https://erp.example.com",
         ERP_PROVISIONING_TOKEN: undefined,
         ERP_COMMAND_TIMEOUT_MS: 5000,
+        ERP_SITE_HOST: "erp.example.com",
       }),
     /ERP_PROVISIONING_TOKEN is not set/
+  );
+});
+
+test("createFrappeClientFromEnv throws when ERP_SITE_HOST missing", () => {
+  assert.throws(
+    () =>
+      createFrappeClientFromEnv({
+        ERP_BASE_URL: "https://erp.example.com",
+        ERP_PROVISIONING_TOKEN: "a".repeat(16),
+        ERP_COMMAND_TIMEOUT_MS: 5000,
+        ERP_SITE_HOST: undefined,
+      }),
+    /ERP_SITE_HOST is not set/
   );
 });
 
@@ -65,6 +82,7 @@ test("callMethod POST sends JSON, correct path, and X-Provisioning-Token (no Aut
     assert.equal(req.method, "POST");
     assert.match(req.url ?? "", /^\/api\/method\/provisioning_api\.api\.provisioning\.create_site$/);
     assert.equal(req.headers["x-provisioning-token"], TEST_TOKEN);
+    assert.equal(req.headers.host, "s1");
     assert.equal(req.headers.authorization, undefined);
     let buf = "";
     req.on("data", (c) => {
@@ -85,6 +103,26 @@ test("callMethod POST sends JSON, correct path, and X-Provisioning-Token (no Aut
     const r = await client.callMethod("provisioning_api.api.provisioning.create_site", { site: "s1" });
     assert.equal(r.ok, true);
     if (r.ok) assert.equal(r.data, "created");
+  } finally {
+    server.close();
+    await new Promise<void>((r) => server.once("close", r));
+  }
+});
+
+test("callMethod with empty object body sends Host = siteHostFallback", async () => {
+  const server = http.createServer((req, res) => {
+    assert.equal(req.headers.host, FALLBACK_SITE_HOST);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ message: "ok" }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const addr = server.address();
+  assert.ok(addr && typeof addr === "object");
+  const port = addr.port;
+  try {
+    const client = createClient({ baseUrl: `http://127.0.0.1:${port}` });
+    const r = await client.callMethod("some.method", {});
+    assert.equal(r.ok, true);
   } finally {
     server.close();
     await new Promise<void>((r) => server.once("close", r));
@@ -174,7 +212,8 @@ test("404 maps to METHOD_NOT_FOUND", async () => {
 });
 
 test("callReadSiteDbName: HTTP 200 + flat message with db_name succeeds", async () => {
-  const server = http.createServer((_req, res) => {
+  const server = http.createServer((req, res) => {
+    assert.equal(req.headers.host, "erp.example.com");
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ message: { db_name: "_fe883896178c6f75" } }));
   });
@@ -391,6 +430,7 @@ test("ping uses GET /api/method/frappe.ping with X-Provisioning-Token (no Author
     assert.equal(req.method, "GET");
     assert.match(req.url ?? "", /^\/api\/method\/frappe\.ping$/);
     assert.equal(req.headers["x-provisioning-token"], TEST_TOKEN);
+    assert.equal(req.headers.host, FALLBACK_SITE_HOST);
     assert.equal(req.headers.authorization, undefined);
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ message: "pong" }));

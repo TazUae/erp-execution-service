@@ -21,6 +21,7 @@ services:
       ERP_REMOTE_TOKEN: ${ERP_REMOTE_TOKEN}
       ERP_COMMAND_TIMEOUT_MS: ${ERP_COMMAND_TIMEOUT_MS:-30000}
       ERP_BASE_URL: ${ERP_BASE_URL:-}
+      ERP_SITE_HOST: ${ERP_SITE_HOST:-}
       ERP_PROVISIONING_TOKEN: ${ERP_PROVISIONING_TOKEN:-}
       ERP_METHOD_CREATE_SITE: ${ERP_METHOD_CREATE_SITE:-provisioning_api.api.provisioning.create_site}
       ERP_METHOD_READ_SITE_DB_NAME: ${ERP_METHOD_READ_SITE_DB_NAME:-provisioning_api.api.provisioning.read_site_db_name}

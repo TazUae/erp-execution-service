@@ -13,6 +13,7 @@ function baseEnv(overrides?: Record<string, string | undefined>) {
     ERP_REMOTE_TOKEN: "test-token-16chars-min",
     ERP_COMMAND_TIMEOUT_MS: "5000",
     ERP_BASE_URL: "http://erp.example:8000",
+    ERP_SITE_HOST: "erp.fallback.example",
     ERP_PROVISIONING_TOKEN: "test-provisioning-token-16chars",
     ...overrides,
   });

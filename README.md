@@ -13,6 +13,8 @@ Frappe exposes callable Python methods over HTTP:
 
 Health checks often use **`GET /api/method/frappe.ping`**, which returns JSON with a `message` field (for example `"pong"`). That ping uses the same **`X-Provisioning-Token`** header as other outbound calls.
 
+**Multi-site Frappe** resolves the site from the HTTP **`Host`** header. Outbound requests still use **`ERP_BASE_URL`** as the TCP target (for example `http://axis-erp-backend:8000`), but the client sets **`Host`** to the site being operated on (`site_name` / `site` in the JSON body when present, otherwise **`ERP_SITE_HOST`** for ping and other calls without a site).
+
 This repository ships a **generic** `FrappeClient` and an **`ErpExecutionAdapter`** that maps each lifecycle action to a configurable dotted method (`POST /api/method/{dotted.path}`). **Upstream Python methods must be whitelisted in Frappe**; until they exist on your ERP deployment, calls may return **404** / **`METHOD_NOT_FOUND`**, which this service maps to **`NOT_IMPLEMENTED`** (HTTP **501**) in the lifecycle envelope.
 
 ### Expected upstream behavior
@@ -47,6 +49,7 @@ For outbound calls to ERPNext, this container must share a Docker network with t
 |------|--------|
 | **External Docker network (exact name)** | `axiserp-erpnext-pnzjyk_axis-erp-internal` |
 | **Intended `ERP_BASE_URL` (env-driven)** | `http://axis-erp-backend:8000` |
+| **`ERP_SITE_HOST`** | Public site hostname Frappe expects on **`Host`** when the request has no site in the body (e.g. **`frappe.ping`**); must match a site name your bench knows |
 | **Provisioning token header** | `ERP_PROVISIONING_TOKEN` must match **`provisioning_api_token`** in ERP **`sites/common_site_config.json`** (sent as **`X-Provisioning-Token`**) |
 
 The tracked **`docker-compose.yml`** and **`docker-compose.dokploy.yml`** attach **`erp-execution-service`** to that external network **in addition to** this project’s default network (and, for Dokploy, `dokploy-network`). After deploy, **redeploy** the service, **verify** the container is on `axiserp-erpnext-pnzjyk_axis-erp-internal`, then run your **live connectivity checks** (e.g. outbound ping / lifecycle against ERP). Smoke-test automation is out of scope for this repo step.
@@ -54,7 +57,7 @@ The tracked **`docker-compose.yml`** and **`docker-compose.dokploy.yml`** attach
 ## Role
 
 - **Stable API**: allowlisted actions (`createSite`, `readSiteDbName`, `installErp`, `enableScheduler`, `addDomain`, `createApiUser`, `healthCheck`), Bearer auth to **this** service (`ERP_REMOTE_TOKEN`), typed success/error envelopes.
-- **Outbound ERP**: `ErpExecutionAdapter` uses `FrappeClient` against `ERP_BASE_URL` with **`X-Provisioning-Token: <ERP_PROVISIONING_TOKEN>`**. If `ERP_BASE_URL` or `ERP_PROVISIONING_TOKEN` is unset, provisioning actions return **`503` / `INFRA_UNAVAILABLE`**. When set, the adapter issues real RPCs; **upstream provisioning logic may still be pending** on the ERP side.
+- **Outbound ERP**: `ErpExecutionAdapter` uses `FrappeClient` against `ERP_BASE_URL` with **`X-Provisioning-Token: <ERP_PROVISIONING_TOKEN>`** and a correct HTTP **`Host`** (per-site from RPC payload, or **`ERP_SITE_HOST`** as fallback). If `ERP_BASE_URL`, `ERP_PROVISIONING_TOKEN`, or `ERP_SITE_HOST` is unset (or env validation fails), provisioning actions return **`503` / `INFRA_UNAVAILABLE`**. When set, the adapter issues real RPCs; **upstream provisioning logic may still be pending** on the ERP side.
 
 ## ERP-side Frappe app (scaffold)
 
@@ -111,6 +114,7 @@ Values match `src/config/env.ts`. See also **`.env.example`**.
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `ERP_BASE_URL` | no* | — | Origin of the ERP stack. **Production/Docker:** `http://axis-erp-backend:8000` (requires network attachment; see **Runtime wiring**). No trailing slash. |
+| `ERP_SITE_HOST` | no* | — | Default HTTP **`Host`** for outbound Frappe calls when the JSON body has no `site_name` / `site` (e.g. **`frappe.ping`**). Required whenever **`ERP_BASE_URL`** is set. Per-action calls that include a site use that site as **`Host`** instead. |
 | `ERP_PROVISIONING_TOKEN` | no* | — | Secret for `provisioning_api` methods, sent as HTTP header **`X-Provisioning-Token`** (not `Authorization: Bearer`); must match **`provisioning_api_token`** in ERP **`sites/common_site_config.json`**. |
 | `ERP_COMMAND_TIMEOUT_MS` | no | `30000` | Per-request timeout for outbound `fetch` to Frappe |
 | `ERP_METHOD_CREATE_SITE` | no | `provisioning_api.api.provisioning.create_site` | Dotted path for `createSite` |
@@ -120,7 +124,7 @@ Values match `src/config/env.ts`. See also **`.env.example`**.
 | `ERP_METHOD_ADD_DOMAIN` | no | `provisioning_api.api.provisioning.add_domain` | Dotted path for `addDomain` |
 | `ERP_METHOD_CREATE_API_USER` | no | `provisioning_api.api.provisioning.create_api_user` | Dotted path for `createApiUser` |
 
-\*Required together for outbound ERP calls: set **`ERP_BASE_URL`** and **`ERP_PROVISIONING_TOKEN`**. The process can start without them; lifecycle actions that need ERP then return **`INFRA_UNAVAILABLE`** until configured.
+\*Required together for outbound ERP calls: set **`ERP_BASE_URL`**, **`ERP_SITE_HOST`**, and **`ERP_PROVISIONING_TOKEN`** (`ERP_SITE_HOST` is required by env validation whenever **`ERP_BASE_URL`** is set). The process can start without outbound ERP vars; lifecycle actions that need ERP then return **`INFRA_UNAVAILABLE`** until configured.
 
 **Payload mapping (this service → Frappe JSON body):** the stable API uses camelCase fields (`site`, `apiUsername`, …). The adapter sends snake_case keys expected by typical Frappe handlers: `site` → `site_name`, `apiUsername` → `api_username`, plus `domain` where applicable.
 
@@ -144,7 +148,7 @@ Values match `src/config/env.ts`. See also **`.env.example`**.
 - If you merge **`docker-compose.yml`** with **`docker-compose.dokploy.yml`**, the Dokploy file uses **`env_file: !reset []`** so the base `env_file: [.env]` is cleared and production still relies on Dokploy-injected variables.
 - **Local-only:** `docker-compose.yml` + a copied **`.env`** (not committed). **Production** should use **`docker-compose.dokploy.yml`** with Dokploy env as above.
 - Build: `docker build -t erp-execution-service .` from the repo root.
-- **Variables:** inbound **`ERP_REMOTE_TOKEN`**; for outbound ERP, **`ERP_BASE_URL`**, **`ERP_PROVISIONING_TOKEN`**, and optional **`ERP_METHOD_*`** overrides — see **`.env.example`** and the table above.
+- **Variables:** inbound **`ERP_REMOTE_TOKEN`**; for outbound ERP, **`ERP_BASE_URL`**, **`ERP_SITE_HOST`**, **`ERP_PROVISIONING_TOKEN`**, and optional **`ERP_METHOD_*`** overrides — see **`.env.example`** and the table above.
 - **Networks:** compose files declare external network **`axiserp-erpnext-pnzjyk_axis-erp-internal`** so the service can reach **`axis-erp-backend:8000`**. Ensure that network exists (created by the ERPNext stack) before starting this service.
 - **`docker-compose.dokploy.yml`** adds **`expose`**, **`dokploy-network`**, and the same ERP internal network. Use it when that matches your Dokploy networking; otherwise stay on `docker-compose.yml` for local-only runs.
 
@@ -156,5 +160,5 @@ Values match `src/config/env.ts`. See also **`.env.example`**.
 
 - Confirm network path from `provisioning-agent` to this service (DNS, TLS if required).
 - Set `ERP_REMOTE_BASE_URL`, `ERP_REMOTE_TOKEN`, and `ERP_REMOTE_TIMEOUT_MS` on provisioning-agent.
-- If outbound ERP env is unset, expect `503` / `INFRA_UNAVAILABLE` for provisioning actions. **`GET /internal/health`** still returns **`200`** and includes an **`upstream`** hint: when ERP is configured it uses **`GET /api/method/frappe.ping`** for reachability (missing methods do not affect liveness).
+- If outbound ERP env is unset, expect `503` / `INFRA_UNAVAILABLE` for provisioning actions. **`GET /internal/health`** still returns **`200`** and includes an **`upstream`** hint: when ERP is configured it uses **`GET /api/method/frappe.ping`** for reachability (missing methods do not affect liveness). Set **`ERP_SITE_HOST`** to the site hostname Frappe expects on **`Host`** for that ping (and as the default when a call has no site in the body).
 - Flip `ERP_EXECUTION_BACKEND=remote` per environment after the adapter is validated end-to-end.
