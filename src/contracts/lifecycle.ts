@@ -69,12 +69,73 @@ const RemoteExecuteDiscriminatedSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("healthCheck"), payload: HealthCheckRequestSchema }),
 ]);
 
-export const RemoteExecuteRequestSchema = z.intersection(
-  RemoteExecuteDiscriminatedSchema,
-  z.object({
-    /** Correlation id from control plane / provisioning-agent (propagated in logs). */
-    requestId: z.string().trim().min(1).max(128).optional(),
-  })
+/**
+ * Maps provisioning-agent / control-plane request shapes to the internal contract:
+ * `input` + camelCase fields → `payload` + `site` / `apiUsername` / etc.
+ * When `payload` is already present, the body is left unchanged.
+ */
+export function normalizeLifecycleRequestBody(raw: unknown): unknown {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return raw;
+  }
+  const o = raw as Record<string, unknown>;
+  if (o.payload !== undefined) {
+    return raw;
+  }
+  if (typeof o.input !== "object" || o.input === null || Array.isArray(o.input)) {
+    return raw;
+  }
+  const input = o.input as Record<string, unknown>;
+  const { input: _drop, ...rest } = o;
+
+  switch (o.action) {
+    case "readSiteDbName":
+    case "createSite":
+    case "installErp":
+    case "enableScheduler": {
+      const site = input.siteName ?? input.site;
+      if (typeof site === "string") {
+        return { ...rest, payload: { site } };
+      }
+      break;
+    }
+    case "addDomain": {
+      const site = input.siteName ?? input.site;
+      const domain = input.domain;
+      if (typeof site === "string" && typeof domain === "string") {
+        return { ...rest, payload: { site, domain } };
+      }
+      break;
+    }
+    case "createApiUser": {
+      const site = input.siteName ?? input.site;
+      const apiUsername = input.apiUsername ?? input.api_username;
+      if (typeof site === "string" && typeof apiUsername === "string") {
+        return { ...rest, payload: { site, apiUsername } };
+      }
+      break;
+    }
+    case "healthCheck": {
+      if (typeof input.deep === "boolean") {
+        return { ...rest, payload: { deep: input.deep } };
+      }
+      return { ...rest, payload: {} };
+    }
+    default:
+      break;
+  }
+  return raw;
+}
+
+export const RemoteExecuteRequestSchema = z.preprocess(
+  normalizeLifecycleRequestBody,
+  z.intersection(
+    RemoteExecuteDiscriminatedSchema,
+    z.object({
+      /** Correlation id from control plane / provisioning-agent (propagated in logs). */
+      requestId: z.string().trim().min(1).max(128).optional(),
+    })
+  )
 );
 export type RemoteExecuteRequest = z.infer<typeof RemoteExecuteRequestSchema>;
 

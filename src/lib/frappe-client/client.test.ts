@@ -173,6 +173,54 @@ test("404 maps to METHOD_NOT_FOUND", async () => {
   }
 });
 
+test("callReadSiteDbName: HTTP 200 + flat message with db_name succeeds", async () => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ message: { db_name: "_fe883896178c6f75" } }));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const addr = server.address();
+  assert.ok(addr && typeof addr === "object");
+  const port = addr.port;
+  try {
+    const client = createClient({ baseUrl: `http://127.0.0.1:${port}` });
+    const r = await client.callReadSiteDbName("provisioning_api.api.provisioning.read_site_db_name", {
+      site_name: "erp.example.com",
+    });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.dbName, "_fe883896178c6f75");
+  } finally {
+    server.close();
+    await new Promise<void>((r) => server.once("close", r));
+  }
+});
+
+test("callReadSiteDbName: HTTP 200 + top-level data field with envelope succeeds", async () => {
+  const server = http.createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({
+        data: { ok: true, data: { db_name: "_fe883896178c6f75" } },
+      })
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const addr = server.address();
+  assert.ok(addr && typeof addr === "object");
+  const port = addr.port;
+  try {
+    const client = createClient({ baseUrl: `http://127.0.0.1:${port}` });
+    const r = await client.callReadSiteDbName("provisioning_api.api.provisioning.read_site_db_name", {
+      site_name: "erp.example.com",
+    });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.dbName, "_fe883896178c6f75");
+  } finally {
+    server.close();
+    await new Promise<void>((r) => server.once("close", r));
+  }
+});
+
 test("callReadSiteDbName: HTTP 200 + message envelope with db_name succeeds", async () => {
   const server = http.createServer((_req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });

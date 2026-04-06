@@ -175,6 +175,38 @@ test("POST /v1/erp/lifecycle handles valid envelope via adapter", async () => {
   }
 });
 
+test("POST /v1/erp/lifecycle accepts input.siteName for readSiteDbName (normalized to payload.site)", async () => {
+  const env = testEnv();
+  const logger = createLogger(env);
+  let seen: RemoteExecuteRequest | undefined;
+  const mockAdapter: LifecycleAdapter = {
+    async run(request) {
+      seen = request;
+      return { ok: true, durationMs: 2, metadata: { db_name: "_bench_db" } };
+    },
+  };
+  const app = await buildApp({ env, logger, adapter: mockAdapter });
+  try {
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/erp/lifecycle",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer test-token-16chars-min",
+      },
+      payload: { action: "readSiteDbName", input: { siteName: "erp.zaidan-group.com" } },
+    });
+    assert.equal(res.statusCode, 200);
+    assert.ok(seen);
+    assert.equal(seen.action, "readSiteDbName");
+    if (seen.action === "readSiteDbName") {
+      assert.equal(seen.payload.site, "erp.zaidan-group.com");
+    }
+  } finally {
+    await app.close();
+  }
+});
+
 test("POST /v1/erp/lifecycle maps adapter failure with SITE_ALREADY_EXISTS", async () => {
   const env = testEnv();
   const logger = createLogger(env);

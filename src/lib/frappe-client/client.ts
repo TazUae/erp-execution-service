@@ -35,20 +35,33 @@ function parseJsonBody(bodyText: string): { parsed: FrappeRawJson | undefined; p
   }
 }
 
-/** Live provisioning RPC envelope under Frappe's top-level ``message`` field. */
-function isReadSiteDbNameSuccessMessage(msg: unknown): msg is { ok: true; data: { db_name: string } } {
+/**
+ * Parses successful ``read_site_db_name`` payloads from Frappe's ``message`` (or ``data``) field.
+ * Supports the provisioning_api envelope ``{ ok: true, data: { db_name } }`` and a flat ``{ db_name }`` return.
+ */
+function extractDbNameFromReadSiteRpcMessage(msg: unknown): string | null {
   if (typeof msg !== "object" || msg === null || Array.isArray(msg)) {
-    return false;
+    return null;
   }
-  const o = msg as { ok?: unknown; data?: unknown };
-  if (o.ok !== true) {
-    return false;
+  const o = msg as Record<string, unknown>;
+  if (o.ok === true) {
+    const data = o.data;
+    if (typeof data === "object" && data !== null && !Array.isArray(data)) {
+      const db = (data as { db_name?: unknown }).db_name;
+      if (typeof db === "string" && db.trim().length > 0) {
+        return db.trim();
+      }
+    }
+    return null;
   }
-  if (typeof o.data !== "object" || o.data === null || Array.isArray(o.data)) {
-    return false;
+  if (o.ok === false) {
+    return null;
   }
-  const db = (o.data as { db_name?: unknown }).db_name;
-  return typeof db === "string" && db.length > 0;
+  const db = o.db_name;
+  if (typeof db === "string" && db.trim().length > 0) {
+    return db.trim();
+  }
+  return null;
 }
 
 function provisioningSiteNotFoundFrom404(parsed: FrappeRawJson | undefined): { message: string } | null {
@@ -187,16 +200,17 @@ export class FrappeClient {
       if (parsed && this.hasExc(parsed)) {
         return { ok: false, error: { code: "ERP_APPLICATION_ERROR", message: safeExcMessage(parsed.exc) } };
       }
-      const msg = parsed?.message;
-      if (isReadSiteDbNameSuccessMessage(msg)) {
-        return { ok: true, dbName: msg.data.db_name };
+      const msg = parsed?.message ?? parsed?.data;
+      const dbName = extractDbNameFromReadSiteRpcMessage(msg);
+      if (dbName !== null) {
+        return { ok: true, dbName };
       }
       return {
         ok: false,
         error: {
           code: "INVALID_RESPONSE",
           message:
-            "read_site_db_name: expected message.ok true and message.data.db_name (string) on HTTP 200",
+            "read_site_db_name: expected message (or data) with ok/data.db_name or db_name (string) on HTTP 200",
         },
       };
     }
