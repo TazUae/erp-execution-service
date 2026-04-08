@@ -24,3 +24,4 @@ networks:
     external: true
   axis-erp-internal:
     external: true
+    name: axiserp-erpnext-pnzjyk_axis-erp-internal
