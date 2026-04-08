@@ -89,7 +89,7 @@ test("callMethod POST sends JSON, correct path, and X-Provisioning-Token (no Aut
       buf += c;
     });
     req.on("end", () => {
-      assert.deepEqual(JSON.parse(buf), { site: "s1" });
+      assert.deepEqual(JSON.parse(buf), { site_name: "s1" });
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ message: "created" }));
     });
@@ -100,7 +100,7 @@ test("callMethod POST sends JSON, correct path, and X-Provisioning-Token (no Aut
   const port = addr.port;
   try {
     const client = createClient({ baseUrl: `http://127.0.0.1:${port}` });
-    const r = await client.callMethod("provisioning_api.api.provisioning.create_site", { site: "s1" });
+    const r = await client.callMethod("provisioning_api.api.provisioning.create_site", { site_name: "s1" });
     assert.equal(r.ok, true);
     if (r.ok) assert.equal(r.data, "created");
   } finally {

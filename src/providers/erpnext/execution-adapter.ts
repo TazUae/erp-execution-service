@@ -83,6 +83,8 @@ export class ErpExecutionAdapter implements LifecycleAdapter {
       switch (request.action) {
         case "createSite":
           validateSite(request.payload.site);
+          validateDomain(request.payload.domain);
+          validateUsername(request.payload.apiUsername);
           break;
         case "readSiteDbName":
           validateSite(request.payload.site);
@@ -220,7 +222,11 @@ export class ErpExecutionAdapter implements LifecycleAdapter {
   private payloadForAction(request: RemoteExecuteRequest): Record<string, string> {
     switch (request.action) {
       case "createSite":
-        return { site_name: validateSite(request.payload.site) };
+        return {
+          site_name: validateSite(request.payload.site),
+          domain: validateDomain(request.payload.domain),
+          api_username: validateUsername(request.payload.apiUsername),
+        };
       case "readSiteDbName":
         return { site_name: validateSite(request.payload.site) };
       case "installErp":

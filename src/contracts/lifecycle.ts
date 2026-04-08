@@ -14,6 +14,8 @@ export type RemoteErpAction = z.infer<typeof RemoteErpActionSchema>;
 
 export const CreateSiteRequestSchema = z.object({
   site: z.string().trim().min(1),
+  domain: z.string().trim().min(1),
+  apiUsername: z.string().trim().min(1),
 });
 export type CreateSiteRequest = z.infer<typeof CreateSiteRequestSchema>;
 
@@ -89,8 +91,16 @@ export function normalizeLifecycleRequestBody(raw: unknown): unknown {
   const { input: _drop, ...rest } = o;
 
   switch (o.action) {
+    case "createSite": {
+      const site = input.siteName ?? input.site;
+      const domain = input.domain;
+      const apiUsername = input.apiUsername ?? input.api_username;
+      if (typeof site === "string" && typeof domain === "string" && typeof apiUsername === "string") {
+        return { ...rest, payload: { site, domain, apiUsername } };
+      }
+      break;
+    }
     case "readSiteDbName":
-    case "createSite":
     case "installErp":
     case "enableScheduler": {
       const site = input.siteName ?? input.site;

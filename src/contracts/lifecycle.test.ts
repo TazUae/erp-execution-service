@@ -36,3 +36,19 @@ test("RemoteExecuteRequestSchema still accepts payload.site", () => {
     assert.equal(parsed.data.payload.site, "erp.zaidan-group.com");
   }
 });
+
+test("normalizeLifecycleRequestBody maps input to createSite payload (camelCase)", () => {
+  const raw = {
+    action: "createSite",
+    input: {
+      siteName: "valid-site",
+      domain: "app.example.com",
+      apiUsername: "api_user",
+    },
+  };
+  const normalized = normalizeLifecycleRequestBody(raw) as Record<string, unknown>;
+  assert.deepEqual(normalized, {
+    action: "createSite",
+    payload: { site: "valid-site", domain: "app.example.com", apiUsername: "api_user" },
+  });
+});

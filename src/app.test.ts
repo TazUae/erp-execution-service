@@ -103,7 +103,10 @@ test("POST /v1/erp/lifecycle returns 422 when semantic site validation fails", a
         "content-type": "application/json",
         authorization: "Bearer test-token-16chars-min",
       },
-      payload: { action: "createSite", payload: { site: "ab" } },
+      payload: {
+        action: "createSite",
+        payload: { site: "ab", domain: "app.example.com", apiUsername: "api_user" },
+      },
     });
     assert.equal(res.statusCode, 422);
     const body = res.json() as { ok: boolean; error: { code: string } };
@@ -130,7 +133,10 @@ test("POST /v1/erp/lifecycle returns 422 for invalid action payload", async () =
         "content-type": "application/json",
         authorization: "Bearer test-token-16chars-min",
       },
-      payload: { action: "createSite", payload: { site: "" } },
+      payload: {
+        action: "createSite",
+        payload: { site: "", domain: "app.example.com", apiUsername: "api_user" },
+      },
     });
     assert.equal(res.statusCode, 422);
     const body = res.json() as { ok: boolean; error: { code: string } };
@@ -231,7 +237,10 @@ test("POST /v1/erp/lifecycle maps adapter failure with SITE_ALREADY_EXISTS", asy
         "content-type": "application/json",
         authorization: "Bearer test-token-16chars-min",
       },
-      payload: { action: "createSite", payload: { site: "valid-site" } },
+      payload: {
+        action: "createSite",
+        payload: { site: "valid-site", domain: "app.example.com", apiUsername: "api_user" },
+      },
     });
     assert.equal(res.statusCode, 409);
     const body = res.json() as { ok: boolean; error: { code: string } };

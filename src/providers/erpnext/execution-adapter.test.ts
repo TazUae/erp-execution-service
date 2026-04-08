@@ -56,11 +56,19 @@ test("createSite calls configured method with site_name payload", async () => {
   const adapter = new ErpExecutionAdapter(env, logger, { frappeClient: client });
   const r = await adapter.run({
     action: "createSite",
-    payload: { site: "valid-site" },
+    payload: {
+      site: "valid-site",
+      domain: "app.example.com",
+      apiUsername: "api_user",
+    },
   });
   assert.equal(r.ok, true);
   assert.equal(seenMethod, "custom.path.create_site");
-  assert.deepEqual(seenPayload, { site_name: "valid-site" });
+  assert.deepEqual(seenPayload, {
+    site_name: "valid-site",
+    domain: "app.example.com",
+    api_username: "api_user",
+  });
 });
 
 test("installErp maps to ERP_METHOD_INSTALL_ERP", async () => {
@@ -124,7 +132,10 @@ test("METHOD_NOT_FOUND maps to NOT_IMPLEMENTED", async () => {
     },
   });
   const adapter = new ErpExecutionAdapter(env, logger, { frappeClient: client });
-  const r = await adapter.run({ action: "createSite", payload: { site: "valid-site" } });
+  const r = await adapter.run({
+    action: "createSite",
+    payload: { site: "valid-site", domain: "app.example.com", apiUsername: "api_user" },
+  });
   assert.equal(r.ok, false);
   if (!r.ok) {
     assert.equal(r.failure.code, "NOT_IMPLEMENTED");
@@ -190,7 +201,10 @@ test("successful Frappe response maps to ok with metadata", async () => {
     },
   });
   const adapter = new ErpExecutionAdapter(env, logger, { frappeClient: client });
-  const r = await adapter.run({ action: "createSite", payload: { site: "valid-site" } });
+  const r = await adapter.run({
+    action: "createSite",
+    payload: { site: "valid-site", domain: "app.example.com", apiUsername: "api_user" },
+  });
   assert.equal(r.ok, true);
   if (r.ok) {
     assert.ok(r.metadata);
