@@ -16,9 +16,11 @@ services:
     restart: unless-stopped
     networks:
       - default
+      - dokploy-network
       - axis-erp-internal
 
 networks:
+  dokploy-network:
+    external: true
   axis-erp-internal:
     external: true
-    name: axiserp-erpnext-pnzjyk_axis-erp-internal
