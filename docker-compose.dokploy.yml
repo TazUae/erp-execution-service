@@ -25,11 +25,6 @@ services:
       ERP_SITE_HOST: ${ERP_SITE_HOST:-}
       ERP_PROVISIONING_TOKEN: ${ERP_PROVISIONING_TOKEN:-}
       ERP_METHOD_CREATE_SITE: ${ERP_METHOD_CREATE_SITE:-provisioning_api.api.provisioning.create_site}
-      ERP_METHOD_READ_SITE_DB_NAME: ${ERP_METHOD_READ_SITE_DB_NAME:-provisioning_api.api.provisioning.read_site_db_name}
-      ERP_METHOD_INSTALL_ERP: ${ERP_METHOD_INSTALL_ERP:-provisioning_api.api.provisioning.install_erp}
-      ERP_METHOD_ENABLE_SCHEDULER: ${ERP_METHOD_ENABLE_SCHEDULER:-provisioning_api.api.provisioning.enable_scheduler}
-      ERP_METHOD_ADD_DOMAIN: ${ERP_METHOD_ADD_DOMAIN:-provisioning_api.api.provisioning.add_domain}
-      ERP_METHOD_CREATE_API_USER: ${ERP_METHOD_CREATE_API_USER:-provisioning_api.api.provisioning.create_api_user}
     expose:
       - "${PORT:-8790}"
     networks:

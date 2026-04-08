@@ -1,6 +1,6 @@
 # erp-execution-service
 
-This service exposes a stable **HTTP** contract (`POST /v1/erp/lifecycle`) for `provisioning-agent` when `ERP_EXECUTION_BACKEND=remote`. **ERP lifecycle work** is integrated via an **HTTP-only** path to **ERPNext/Frappe** using the **`FrappeClient`** (`src/lib/frappe-client/`). The legacy bench/subprocess/filesystem execution model has been removed.
+This service is a **thin HTTP adapter** to **ERPNext/Frappe** `provisioning_api.api.provisioning.create_site`: **`POST /sites/create`** validates input, forwards **`{ site_name }`** to the ERP RPC with **`X-Provisioning-Token`**, and returns a small JSON envelope. Outbound calls use **`FrappeClient`** (`src/lib/frappe-client/`). The legacy bench/subprocess/filesystem execution model has been removed.
 
 ## Frappe / ERPNext HTTP API
 
@@ -15,7 +15,7 @@ Health checks often use **`GET /api/method/frappe.ping`**, which returns JSON wi
 
 **Multi-site Frappe** resolves the site from the HTTP **`Host`** header. Outbound requests still use **`ERP_BASE_URL`** as the TCP target (for example `http://axis-erp-backend:8000`), but the client sets **`Host`** to the site being operated on (`site_name` / `site` in the JSON body when present, otherwise **`ERP_SITE_HOST`** for ping and other calls without a site).
 
-This repository ships a **generic** `FrappeClient` and an **`ErpExecutionAdapter`** that maps each lifecycle action to a configurable dotted method (`POST /api/method/{dotted.path}`). **Upstream Python methods must be whitelisted in Frappe**; until they exist on your ERP deployment, calls may return **404** / **`METHOD_NOT_FOUND`**, which this service maps to **`NOT_IMPLEMENTED`** (HTTP **501**) in the lifecycle envelope.
+This repository ships a **generic** `FrappeClient` and a single **`createSite`** path wired to **`ERP_METHOD_CREATE_SITE`** (`POST /api/method/{dotted.path}`). **Upstream Python methods must be whitelisted in Frappe**; until they exist on your ERP deployment, calls may return **404** / **`METHOD_NOT_FOUND`**, which this service maps to **`NOT_IMPLEMENTED`** (HTTP **501**).
 
 ### Expected upstream behavior
 
@@ -52,12 +52,12 @@ For outbound calls to ERPNext, this container must share a Docker network with t
 | **`ERP_SITE_HOST`** | Public site hostname Frappe expects on **`Host`** when the request has no site in the body (e.g. **`frappe.ping`**); must match a site name your bench knows |
 | **Provisioning token header** | `ERP_PROVISIONING_TOKEN` must match **`provisioning_api_token`** in ERP **`sites/common_site_config.json`** (sent as **`X-Provisioning-Token`**) |
 
-The tracked **`docker-compose.yml`** and **`docker-compose.dokploy.yml`** attach **`erp-execution-service`** to that external network **in addition to** this project’s default network (and, for Dokploy, `dokploy-network`). **`docker-compose.dokploy.yml`** sets network alias **`erp-execution-service`** on **`dokploy-network`** so peers (for example **`provisioning-agent`**) can resolve **`http://erp-execution-service:<PORT>`** for **`ERP_REMOTE_BASE_URL`**. After deploy, **redeploy** the service, **verify** the container is on `axiserp-erpnext-pnzjyk_axis-erp-internal`, then run your **live connectivity checks** (e.g. outbound ping / lifecycle against ERP). Smoke-test automation is out of scope for this repo step.
+The tracked **`docker-compose.yml`** and **`docker-compose.dokploy.yml`** attach **`erp-execution-service`** to that external network **in addition to** this project’s default network (and, for Dokploy, `dokploy-network`). **`docker-compose.dokploy.yml`** sets network alias **`erp-execution-service`** on **`dokploy-network`** so peers (for example **`provisioning-agent`**) can resolve **`http://erp-execution-service:<PORT>`** for **`ERP_REMOTE_BASE_URL`**. After deploy, **redeploy** the service, **verify** the container is on `axiserp-erpnext-pnzjyk_axis-erp-internal`, then run your **live connectivity checks** (e.g. outbound ping / `POST /sites/create` against ERP). Smoke-test automation is out of scope for this repo step.
 
 ## Role
 
-- **Stable API**: allowlisted actions (`createSite`, `readSiteDbName`, `installErp`, `enableScheduler`, `addDomain`, `createApiUser`, `healthCheck`), Bearer auth to **this** service (`ERP_REMOTE_TOKEN`), typed success/error envelopes.
-- **Outbound ERP**: `ErpExecutionAdapter` uses `FrappeClient` against `ERP_BASE_URL` with **`X-Provisioning-Token: <ERP_PROVISIONING_TOKEN>`** and a correct HTTP **`Host`** (per-site from RPC payload, or **`ERP_SITE_HOST`** as fallback). If `ERP_BASE_URL`, `ERP_PROVISIONING_TOKEN`, or `ERP_SITE_HOST` is unset (or env validation fails), provisioning actions return **`503` / `INFRA_UNAVAILABLE`**. When set, the adapter issues real RPCs; **upstream provisioning logic may still be pending** on the ERP side.
+- **Stable API**: **`POST /sites/create`** with JSON body `{ siteName, domain, apiUsername }` (camelCase); Bearer auth to **this** service (`ERP_REMOTE_TOKEN`). Success: `{ ok: true, data: { siteName } }`. Errors use `ok: false` and mapped HTTP status codes.
+- **Outbound ERP**: `createSite` uses `FrappeClient` against `ERP_BASE_URL` with **`X-Provisioning-Token: <ERP_PROVISIONING_TOKEN>`** and HTTP **`Host`** derived from **`site_name`** in the body (or **`ERP_SITE_HOST`** when needed). If `ERP_BASE_URL`, `ERP_PROVISIONING_TOKEN`, or `ERP_SITE_HOST` is unset, **`503` / `INFRA_UNAVAILABLE`**. **Only `{ site_name }`** is sent to the ERP RPC (ERP contract); `domain` and `apiUsername` are validated locally.
 
 ## ERP-side Frappe app (scaffold)
 
@@ -65,23 +65,14 @@ The directory [`provisioning_api/`](provisioning_api/README.md) is a **Frappe cu
 
 ## ERPNext provisioning API (upstream)
 
-Custom **whitelisted** Frappe methods are expected to exist on the ERP stack when provisioning is enabled, for example:
-
-- `provisioning_api.api.provisioning.create_site`
-- `provisioning_api.api.provisioning.read_site_db_name`
-- `provisioning_api.api.provisioning.install_erp`
-- `provisioning_api.api.provisioning.enable_scheduler`
-- `provisioning_api.api.provisioning.add_domain`
-- `provisioning_api.api.provisioning.create_api_user`
-
-Those methods are **not** implemented in this repository; they must exist on the ERP stack as **whitelisted** `@frappe.whitelist()` (or equivalent) Python entry points. The execution service is **transport-wired**; behavior depends on your ERP version and custom app.
+This service calls **`provisioning_api.api.provisioning.create_site`** (configurable via **`ERP_METHOD_CREATE_SITE`**). That method must exist on the ERP stack as a **whitelisted** `@frappe.whitelist()` (or equivalent) Python entry point. Other provisioning RPCs may exist on the ERP side; they are **not** exposed by this service.
 
 ## Endpoints
 
 | Method | Path | Auth |
 |--------|------|------|
 | `GET` | `/internal/health` | None (internal probes) |
-| `POST` | `/v1/erp/lifecycle` | `Authorization: Bearer <ERP_REMOTE_TOKEN>` |
+| `POST` | `/sites/create` | `Authorization: Bearer <ERP_REMOTE_TOKEN>` |
 
 ## Stack
 
@@ -117,16 +108,11 @@ Values match `src/config/env.ts`. See also **`.env.example`**.
 | `ERP_SITE_HOST` | no* | — | Default HTTP **`Host`** for outbound Frappe calls when the JSON body has no `site_name` / `site` (e.g. **`frappe.ping`**). Required whenever **`ERP_BASE_URL`** is set. Per-action calls that include a site use that site as **`Host`** instead. |
 | `ERP_PROVISIONING_TOKEN` | no* | — | Secret for `provisioning_api` methods, sent as HTTP header **`X-Provisioning-Token`** (not `Authorization: Bearer`); must match **`provisioning_api_token`** in ERP **`sites/common_site_config.json`**. |
 | `ERP_COMMAND_TIMEOUT_MS` | no | `30000` | Per-request timeout for outbound `fetch` to Frappe |
-| `ERP_METHOD_CREATE_SITE` | no | `provisioning_api.api.provisioning.create_site` | Dotted path for `createSite` |
-| `ERP_METHOD_READ_SITE_DB_NAME` | no | `provisioning_api.api.provisioning.read_site_db_name` | Dotted path for `readSiteDbName` |
-| `ERP_METHOD_INSTALL_ERP` | no | `provisioning_api.api.provisioning.install_erp` | Dotted path for `installErp` |
-| `ERP_METHOD_ENABLE_SCHEDULER` | no | `provisioning_api.api.provisioning.enable_scheduler` | Dotted path for `enableScheduler` |
-| `ERP_METHOD_ADD_DOMAIN` | no | `provisioning_api.api.provisioning.add_domain` | Dotted path for `addDomain` |
-| `ERP_METHOD_CREATE_API_USER` | no | `provisioning_api.api.provisioning.create_api_user` | Dotted path for `createApiUser` |
+| `ERP_METHOD_CREATE_SITE` | no | `provisioning_api.api.provisioning.create_site` | Dotted path for `create_site` |
 
-\*Required together for outbound ERP calls: set **`ERP_BASE_URL`**, **`ERP_SITE_HOST`**, and **`ERP_PROVISIONING_TOKEN`** (`ERP_SITE_HOST` is required by env validation whenever **`ERP_BASE_URL`** is set). The process can start without outbound ERP vars; lifecycle actions that need ERP then return **`INFRA_UNAVAILABLE`** until configured.
+\*Required together for outbound ERP calls: set **`ERP_BASE_URL`**, **`ERP_SITE_HOST`**, and **`ERP_PROVISIONING_TOKEN`** (`ERP_SITE_HOST` is required by env validation whenever **`ERP_BASE_URL`** is set). The process can start without outbound ERP vars; **`POST /sites/create`** then returns **`503` / `INFRA_UNAVAILABLE`** until configured.
 
-**Payload mapping (this service → Frappe JSON body):** the stable API uses camelCase fields (`site`, `apiUsername`, …). The adapter sends snake_case keys expected by typical Frappe handlers: `site` → `site_name`, `apiUsername` → `api_username`, plus `domain` where applicable.
+**Payload mapping (this service → Frappe JSON body):** inbound **`siteName`** → outbound **`site_name`** only (ERP contract for `create_site`).
 
 ## Deployment
 

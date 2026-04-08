@@ -1,4 +1,4 @@
-import type { RemoteExecutionFailureCode } from "../../contracts/lifecycle.js";
+import type { RemoteExecutionFailureCode } from "../../contracts/errors.js";
 
 export function mapFailureCodeToHttpStatus(code: RemoteExecutionFailureCode): number {
   const map: Record<RemoteExecutionFailureCode, number> = {

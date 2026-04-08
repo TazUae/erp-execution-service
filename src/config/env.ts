@@ -4,7 +4,7 @@ import { z } from "zod";
  * HTTP-only ERP integration: inbound Bearer auth; outbound `X-Provisioning-Token` to Frappe provisioning API (see `lib/frappe-client/client.ts`).
  *
  * Keys here must stay in sync with `.env.example`: NODE_ENV, PORT, ERP_REMOTE_TOKEN,
- * ERP_COMMAND_TIMEOUT_MS, ERP_BASE_URL, ERP_SITE_HOST, ERP_PROVISIONING_TOKEN, ERP_METHOD_*.
+ * ERP_COMMAND_TIMEOUT_MS, ERP_BASE_URL, ERP_SITE_HOST, ERP_PROVISIONING_TOKEN, ERP_METHOD_CREATE_SITE.
  */
 /** Compose may substitute unset `${VAR}` as an empty string; treat that as unset for optional keys. */
 const emptyToUndefined = (v: unknown) => (v === "" ? undefined : v);
@@ -32,25 +32,8 @@ const EnvSchema = z.object({
    * `provisioning_api_token` in the ERP `sites/common_site_config.json`.
    */
   ERP_PROVISIONING_TOKEN: z.preprocess(emptyToUndefined, z.string().trim().min(16).optional()),
-  /** Dotted Frappe method for each lifecycle action (`POST /api/method/{path}`). */
+  /** Dotted Frappe method for `create_site` (`POST /api/method/{path}`). */
   ERP_METHOD_CREATE_SITE: z.string().trim().min(1).default("provisioning_api.api.provisioning.create_site"),
-  ERP_METHOD_READ_SITE_DB_NAME: z
-    .string()
-    .trim()
-    .min(1)
-    .default("provisioning_api.api.provisioning.read_site_db_name"),
-  ERP_METHOD_INSTALL_ERP: z.string().trim().min(1).default("provisioning_api.api.provisioning.install_erp"),
-  ERP_METHOD_ENABLE_SCHEDULER: z
-    .string()
-    .trim()
-    .min(1)
-    .default("provisioning_api.api.provisioning.enable_scheduler"),
-  ERP_METHOD_ADD_DOMAIN: z.string().trim().min(1).default("provisioning_api.api.provisioning.add_domain"),
-  ERP_METHOD_CREATE_API_USER: z
-    .string()
-    .trim()
-    .min(1)
-    .default("provisioning_api.api.provisioning.create_api_user"),
 })
   .superRefine((data, ctx) => {
     if (data.ERP_BASE_URL && !data.ERP_SITE_HOST) {

@@ -1,9 +1,9 @@
 import type { FrappeErrorCode } from "../../lib/frappe-client/types.js";
-import type { RemoteExecutionFailure } from "../../contracts/lifecycle.js";
+import type { RemoteExecutionFailure } from "../../contracts/errors.js";
 
 /**
- * Maps normalized {@link FrappeErrorCode} values from `FrappeClient` to the lifecycle
- * failure contract. Keeps a single place for outbound ERP error semantics.
+ * Maps normalized {@link FrappeErrorCode} values from `FrappeClient` to HTTP-facing
+ * failure codes. Keeps a single place for outbound ERP error semantics.
  */
 export function mapFrappeErrorToRemoteFailure(frappeCode: FrappeErrorCode, message: string): RemoteExecutionFailure {
   switch (frappeCode) {
