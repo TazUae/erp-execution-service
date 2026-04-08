@@ -25,6 +25,11 @@ services:
       ERP_SITE_HOST: ${ERP_SITE_HOST:-}
       ERP_PROVISIONING_TOKEN: ${ERP_PROVISIONING_TOKEN:-}
       ERP_METHOD_CREATE_SITE: ${ERP_METHOD_CREATE_SITE:-provisioning_api.api.provisioning.create_site}
+      ERP_DOCKER_BIN: ${ERP_DOCKER_BIN:-docker}
+      ERP_DOCKER_BACKEND_CONTAINER: ${ERP_DOCKER_BACKEND_CONTAINER:-axiserp-erpnext-pnzjyk-backend-1}
+      ERP_NEW_SITE_ADMIN_PASSWORD: ${ERP_NEW_SITE_ADMIN_PASSWORD:-9Obtpzkb8c8}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     expose:
       - "${PORT:-8790}"
     networks:

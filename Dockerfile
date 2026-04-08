@@ -16,13 +16,18 @@ RUN npm ci && npm run build && npm prune --omit=dev
 
 FROM node:20-bookworm
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends docker.io \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /opt/erp-execution-service
 
 COPY --from=builder /build/package.json /build/package-lock.json ./
 COPY --from=builder /build/node_modules ./node_modules
 COPY --from=builder /build/dist ./dist
 
-USER node
+# Host Docker socket is mounted at runtime; root can access default root-owned socket.
+USER root
 
 EXPOSE 8790
 

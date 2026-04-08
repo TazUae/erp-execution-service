@@ -17,7 +17,7 @@ function testEnv() {
 test("GET /internal/health returns ok", async () => {
   const env = testEnv();
   const logger = createLogger(env);
-  const mockCreateSite = async (): Promise<CreateSiteResult> => ({ ok: true, data: { siteName: "x" } });
+  const mockCreateSite = async (): Promise<CreateSiteResult> => ({ ok: true, data: { site: "x" } });
   const app = await buildApp({ env, logger, createSiteFn: mockCreateSite });
   try {
     const res = await app.inject({ method: "GET", url: "/internal/health" });
@@ -37,7 +37,7 @@ test("GET /internal/health returns ok", async () => {
 test("POST /sites/create rejects missing bearer token", async () => {
   const env = testEnv();
   const logger = createLogger(env);
-  const mockCreateSite = async (): Promise<CreateSiteResult> => ({ ok: true, data: { siteName: "x" } });
+  const mockCreateSite = async (): Promise<CreateSiteResult> => ({ ok: true, data: { site: "x" } });
   const app = await buildApp({ env, logger, createSiteFn: mockCreateSite });
   try {
     const res = await app.inject({
@@ -47,9 +47,9 @@ test("POST /sites/create rejects missing bearer token", async () => {
       payload: { siteName: "valid-site", domain: "app.example.com", apiUsername: "api_user" },
     });
     assert.equal(res.statusCode, 401);
-    const body = res.json() as { ok: boolean; error: { code: string } };
+    const body = res.json() as { ok: boolean; error: string };
     assert.equal(body.ok, false);
-    assert.equal(body.error.code, "ERP_VALIDATION_FAILED");
+    assert.equal(body.error, "Unauthorized");
   } finally {
     await app.close();
   }
@@ -58,7 +58,7 @@ test("POST /sites/create rejects missing bearer token", async () => {
 test("POST /sites/create rejects wrong bearer token", async () => {
   const env = testEnv();
   const logger = createLogger(env);
-  const mockCreateSite = async (): Promise<CreateSiteResult> => ({ ok: true, data: { siteName: "x" } });
+  const mockCreateSite = async (): Promise<CreateSiteResult> => ({ ok: true, data: { site: "x" } });
   const app = await buildApp({ env, logger, createSiteFn: mockCreateSite });
   try {
     const res = await app.inject({
@@ -91,8 +91,8 @@ test("POST /sites/create returns 422 when semantic site validation fails", async
       payload: { siteName: "ab", domain: "app.example.com", apiUsername: "api_user" },
     });
     assert.equal(res.statusCode, 422);
-    const body = res.json() as { ok: boolean; error: { code: string } };
-    assert.equal(body.error.code, "ERP_VALIDATION_FAILED");
+    const body = res.json() as { ok: boolean; error: string };
+    assert.match(body.error, /Invalid site name/);
   } finally {
     await app.close();
   }
@@ -101,7 +101,7 @@ test("POST /sites/create returns 422 when semantic site validation fails", async
 test("POST /sites/create returns 422 for empty siteName", async () => {
   const env = testEnv();
   const logger = createLogger(env);
-  const mockCreateSite = async (): Promise<CreateSiteResult> => ({ ok: true, data: { siteName: "x" } });
+  const mockCreateSite = async (): Promise<CreateSiteResult> => ({ ok: true, data: { site: "x" } });
   const app = await buildApp({ env, logger, createSiteFn: mockCreateSite });
   try {
     const res = await app.inject({
@@ -114,8 +114,9 @@ test("POST /sites/create returns 422 for empty siteName", async () => {
       payload: { siteName: "", domain: "app.example.com", apiUsername: "api_user" },
     });
     assert.equal(res.statusCode, 422);
-    const body = res.json() as { ok: boolean; error: { code: string } };
-    assert.equal(body.error.code, "ERP_VALIDATION_FAILED");
+    const body = res.json() as { ok: boolean; error: string };
+    assert.equal(body.ok, false);
+    assert.ok(body.error.length > 0);
   } finally {
     await app.close();
   }
@@ -127,7 +128,7 @@ test("POST /sites/create returns 200 with standardized payload via mock", async 
   let seen: CreateSiteParams | undefined;
   const mockCreateSite = async (params: CreateSiteParams): Promise<CreateSiteResult> => {
     seen = params;
-    return { ok: true, data: { siteName: params.siteName } };
+    return { ok: true, data: { site: params.siteName } };
   };
   const app = await buildApp({ env, logger, createSiteFn: mockCreateSite });
   try {
@@ -145,9 +146,9 @@ test("POST /sites/create returns 200 with standardized payload via mock", async 
       },
     });
     assert.equal(res.statusCode, 200);
-    const body = res.json() as { ok: boolean; data: { siteName: string } };
+    const body = res.json() as { ok: boolean; data: { site: string } };
     assert.equal(body.ok, true);
-    assert.equal(body.data.siteName, "site.example.com");
+    assert.equal(body.data.site, "site.example.com");
     assert.ok(seen);
     assert.equal(seen.siteName, "site.example.com");
   } finally {
@@ -155,12 +156,12 @@ test("POST /sites/create returns 200 with standardized payload via mock", async 
   }
 });
 
-test("POST /sites/create maps failure with SITE_ALREADY_EXISTS", async () => {
+test("POST /sites/create returns 500 when provisioning fails", async () => {
   const env = testEnv();
   const logger = createLogger(env);
   const mockCreateSite = async (): Promise<CreateSiteResult> => ({
     ok: false,
-    failure: { code: "SITE_ALREADY_EXISTS", message: "duplicate", retryable: false },
+    error: "duplicate",
   });
   const app = await buildApp({ env, logger, createSiteFn: mockCreateSite });
   try {
@@ -177,21 +178,21 @@ test("POST /sites/create maps failure with SITE_ALREADY_EXISTS", async () => {
         apiUsername: "api_user",
       },
     });
-    assert.equal(res.statusCode, 409);
-    const body = res.json() as { ok: boolean; error: { code: string } };
+    assert.equal(res.statusCode, 500);
+    const body = res.json() as { ok: boolean; error: string };
     assert.equal(body.ok, false);
-    assert.equal(body.error.code, "SITE_ALREADY_EXISTS");
+    assert.equal(body.error, "duplicate");
   } finally {
     await app.close();
   }
 });
 
-test("POST /sites/create maps failure with ERP_TIMEOUT", async () => {
+test("POST /sites/create returns 500 for execution errors", async () => {
   const env = testEnv();
   const logger = createLogger(env);
   const mockCreateSite = async (): Promise<CreateSiteResult> => ({
     ok: false,
-    failure: { code: "ERP_TIMEOUT", message: "timed out", retryable: true },
+    error: "timed out",
   });
   const app = await buildApp({ env, logger, createSiteFn: mockCreateSite });
   try {
@@ -208,18 +209,18 @@ test("POST /sites/create maps failure with ERP_TIMEOUT", async () => {
         apiUsername: "api_user",
       },
     });
-    assert.equal(res.statusCode, 504);
+    assert.equal(res.statusCode, 500);
   } finally {
     await app.close();
   }
 });
 
-test("POST /sites/create maps failure with INFRA_UNAVAILABLE", async () => {
+test("POST /sites/create returns 500 for infra-style errors", async () => {
   const env = testEnv();
   const logger = createLogger(env);
   const mockCreateSite = async (): Promise<CreateSiteResult> => ({
     ok: false,
-    failure: { code: "INFRA_UNAVAILABLE", message: "remote unavailable", retryable: true },
+    error: "remote unavailable",
   });
   const app = await buildApp({ env, logger, createSiteFn: mockCreateSite });
   try {
@@ -236,7 +237,7 @@ test("POST /sites/create maps failure with INFRA_UNAVAILABLE", async () => {
         apiUsername: "api_user",
       },
     });
-    assert.equal(res.statusCode, 503);
+    assert.equal(res.statusCode, 500);
   } finally {
     await app.close();
   }

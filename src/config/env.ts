@@ -4,7 +4,8 @@ import { z } from "zod";
  * HTTP-only ERP integration: inbound Bearer auth; outbound `X-Provisioning-Token` to Frappe provisioning API (see `lib/frappe-client/client.ts`).
  *
  * Keys here must stay in sync with `.env.example`: NODE_ENV, PORT, ERP_REMOTE_TOKEN,
- * ERP_COMMAND_TIMEOUT_MS, ERP_BASE_URL, ERP_SITE_HOST, ERP_PROVISIONING_TOKEN, ERP_METHOD_CREATE_SITE.
+ * ERP_COMMAND_TIMEOUT_MS, ERP_DOCKER_BIN, ERP_DOCKER_BACKEND_CONTAINER, ERP_NEW_SITE_ADMIN_PASSWORD,
+ * ERP_BASE_URL, ERP_SITE_HOST, ERP_PROVISIONING_TOKEN, ERP_METHOD_CREATE_SITE.
  */
 /** Compose may substitute unset `${VAR}` as an empty string; treat that as unset for optional keys. */
 const emptyToUndefined = (v: unknown) => (v === "" ? undefined : v);
@@ -15,6 +16,12 @@ const EnvSchema = z.object({
   /** Shared secret with provisioning-agent RemoteErpBackend (Bearer). */
   ERP_REMOTE_TOKEN: z.string().trim().min(16),
   ERP_COMMAND_TIMEOUT_MS: z.coerce.number().int().min(1).max(300_000).default(30_000),
+  /** Path to Docker CLI (no shell); must reach the host daemon via mounted `/var/run/docker.sock`. */
+  ERP_DOCKER_BIN: z.string().trim().min(1).default("docker"),
+  /** Target backend container for `docker exec … bench …` (site provisioning). */
+  ERP_DOCKER_BACKEND_CONTAINER: z.string().trim().min(1).default("axiserp-erpnext-pnzjyk-backend-1"),
+  /** Passed to `bench new-site --admin-password`. Override in production via env. */
+  ERP_NEW_SITE_ADMIN_PASSWORD: z.string().trim().min(1).default("9Obtpzkb8c8"),
   /**
    * Base URL for the ERP HTTP API (e.g. `http://axis-erp-backend:8000`).
    * Used by `FrappeClient` when calling Frappe/ERPNext.
