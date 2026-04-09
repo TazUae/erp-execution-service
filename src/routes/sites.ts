@@ -40,8 +40,14 @@ export const sitesRoutes: FastifyPluginAsync<SitesRouteOpts> = async (fastify, o
       return reply.status(200).send(result);
     }
 
-    const statusCode = result.validation ? 422 : 500;
-    return reply.status(statusCode).send({
+    if (result.validation) {
+      return reply.status(422).send({
+        ok: false,
+        error: result.error,
+      });
+    }
+
+    return reply.status(500).send({
       ok: false,
       error: result.error,
     });

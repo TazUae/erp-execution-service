@@ -161,7 +161,16 @@ test("POST /sites/create returns 500 when provisioning fails", async () => {
   const logger = createLogger(env);
   const mockCreateSite = async (): Promise<CreateSiteResult> => ({
     ok: false,
-    error: "duplicate",
+    error: {
+      code: "SITE_ALREADY_EXISTS",
+      message: "ERP command failed",
+      details: {
+        command: "docker exec … bench new-site …",
+        exitCode: 1,
+        stdout: "",
+        stderr: "duplicate",
+      },
+    },
   });
   const app = await buildApp({ env, logger, createSiteFn: mockCreateSite });
   try {
@@ -179,9 +188,13 @@ test("POST /sites/create returns 500 when provisioning fails", async () => {
       },
     });
     assert.equal(res.statusCode, 500);
-    const body = res.json() as { ok: boolean; error: string };
+    const body = res.json() as {
+      ok: boolean;
+      error: { code: string; message: string; details: { stderr: string } };
+    };
     assert.equal(body.ok, false);
-    assert.equal(body.error, "duplicate");
+    assert.equal(body.error.code, "SITE_ALREADY_EXISTS");
+    assert.equal(body.error.details.stderr, "duplicate");
   } finally {
     await app.close();
   }
@@ -192,7 +205,11 @@ test("POST /sites/create returns 500 for execution errors", async () => {
   const logger = createLogger(env);
   const mockCreateSite = async (): Promise<CreateSiteResult> => ({
     ok: false,
-    error: "timed out",
+    error: {
+      code: "ERP_COMMAND_FAILED",
+      message: "ERP command failed",
+      details: { command: "", exitCode: null, stdout: "", stderr: "timed out" },
+    },
   });
   const app = await buildApp({ env, logger, createSiteFn: mockCreateSite });
   try {
@@ -220,7 +237,11 @@ test("POST /sites/create returns 500 for infra-style errors", async () => {
   const logger = createLogger(env);
   const mockCreateSite = async (): Promise<CreateSiteResult> => ({
     ok: false,
-    error: "remote unavailable",
+    error: {
+      code: "ERP_COMMAND_FAILED",
+      message: "ERP command failed",
+      details: { command: "", exitCode: null, stdout: "", stderr: "remote unavailable" },
+    },
   });
   const app = await buildApp({ env, logger, createSiteFn: mockCreateSite });
   try {

@@ -1,6 +1,6 @@
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { createSite, sanitizeSiteName } from "./create-site.js";
+import { classifyError, createSite, sanitizeSiteName } from "./create-site.js";
 import { loadEnv, resetEnvCacheForTests } from "../config/env.js";
 
 function baseEnv(overrides?: Record<string, string | undefined>) {
@@ -22,6 +22,14 @@ afterEach(() => {
 test("sanitizeSiteName lowercases and uses dashes only", () => {
   assert.equal(sanitizeSiteName("My_Site.Name"), "my-site-name");
   assert.equal(sanitizeSiteName("  hello world  "), "hello-world");
+});
+
+test("classifyError maps stderr substrings to codes", () => {
+  assert.equal(classifyError("Access denied for user"), "ERP_DB_AUTH_FAILED");
+  assert.equal(classifyError("Site already exists"), "SITE_ALREADY_EXISTS");
+  assert.equal(classifyError("invalid site"), "INVALID_SITE_NAME");
+  assert.equal(classifyError("Connection refused"), "DB_CONNECTION_FAILED");
+  assert.equal(classifyError("something else"), "ERP_COMMAND_FAILED");
 });
 
 test("createSite runs docker exec new-site then set-config with expected argv", async () => {
@@ -93,8 +101,10 @@ test("createSite returns error when docker exec fails", async () => {
     }
   );
   assert.equal(r.ok, false);
-  if (!r.ok) {
-    assert.equal(r.error, "bench failed");
-    assert.equal(r.validation, undefined);
+  if (!r.ok && !("validation" in r && r.validation)) {
+    assert.equal(r.error.code, "ERP_COMMAND_FAILED");
+    assert.equal(r.error.message, "ERP command failed");
+    assert.equal(r.error.details.stderr, "bench failed");
+    assert.match(r.error.details.command, /bench new-site/);
   }
 });
