@@ -32,14 +32,14 @@ test("classifyError maps stderr substrings to codes", () => {
   assert.equal(classifyError("something else"), "ERP_COMMAND_FAILED");
 });
 
-test("createSite runs docker exec new-site then set-config with expected argv", async () => {
+test("createSite runs new-site, install-app erpnext, install-app provisioning_api, then set-config", async () => {
   const env = baseEnv();
   const calls: string[][] = [];
   const r = await createSite(
     env,
     { siteName: "valid-site.example.com", domain: "app.example.com", apiUsername: "api_user" },
     {
-      execDocker: async (argv, _timeoutMs) => {
+      execDocker: async (argv, _timeoutMs, _step) => {
         calls.push(argv);
       },
     }
@@ -48,7 +48,7 @@ test("createSite runs docker exec new-site then set-config with expected argv", 
   if (r.ok) {
     assert.equal(r.data.site, "valid-site-example-com");
   }
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 4);
   assert.deepEqual(calls[0], [
     "docker",
     "exec",
@@ -60,10 +60,29 @@ test("createSite runs docker exec new-site then set-config with expected argv", 
     "test-admin-pass",
     "--db-type",
     "mariadb",
-    "--install-app",
-    "erpnext",
+    "--force",
   ]);
   assert.deepEqual(calls[1], [
+    "docker",
+    "exec",
+    "test-backend",
+    "bench",
+    "--site",
+    "valid-site-example-com",
+    "install-app",
+    "erpnext",
+  ]);
+  assert.deepEqual(calls[2], [
+    "docker",
+    "exec",
+    "test-backend",
+    "bench",
+    "--site",
+    "valid-site-example-com",
+    "install-app",
+    "provisioning_api",
+  ]);
+  assert.deepEqual(calls[3], [
     "docker",
     "exec",
     "test-backend",
@@ -104,6 +123,7 @@ test("createSite returns error when docker exec fails", async () => {
   if (!r.ok && !("validation" in r && r.validation)) {
     assert.equal(r.error.code, "ERP_COMMAND_FAILED");
     assert.equal(r.error.message, "ERP command failed");
+    assert.equal(r.error.details.step, "create_site");
     assert.equal(r.error.details.stderr, "bench failed");
     assert.match(r.error.details.command, /bench new-site/);
   }

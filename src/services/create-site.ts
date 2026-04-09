@@ -9,10 +9,18 @@ export type CreateSiteParams = {
   apiUsername: string;
 };
 
+/** Identifies which bench step failed during provisioning. */
+export type ProvisionStep =
+  | "create_site"
+  | "install_app_erpnext"
+  | "install_app_provisioning_api"
+  | "set_config_host_name";
+
 export type CreateSiteExecutionError = {
   code: string;
   message: string;
   details: {
+    step: ProvisionStep;
     command: string;
     exitCode: number | null;
     stdout: string;
@@ -26,7 +34,7 @@ export type CreateSiteResult =
   | { ok: false; error: CreateSiteExecutionError };
 
 export type CreateSiteDeps = {
-  execDocker?: (argv: string[], timeoutMs: number) => Promise<void>;
+  execDocker?: (argv: string[], timeoutMs: number, step: ProvisionStep) => Promise<void>;
 };
 
 export function classifyError(stderr: string): string {
@@ -44,6 +52,7 @@ export class DockerExecError extends Error {
     readonly exitCode: number | null,
     readonly stdout: string,
     readonly stderr: string,
+    readonly step: ProvisionStep,
   ) {
     super((stderr || stdout || "").trim() || `docker exited with code ${exitCode ?? "null"}`);
   }
@@ -57,6 +66,7 @@ function executionErrorFromDocker(err: DockerExecError): CreateSiteExecutionErro
     code,
     message: "ERP command failed",
     details: {
+      step: err.step,
       command: err.command,
       exitCode: err.exitCode,
       stdout: err.stdout,
@@ -74,7 +84,7 @@ export function sanitizeSiteName(raw: string): string {
   return dashed.replace(/^-|-$/g, "");
 }
 
-function defaultExecDocker(argv: string[], timeoutMs: number): Promise<void> {
+function defaultExecDocker(argv: string[], timeoutMs: number, step: ProvisionStep): Promise<void> {
   const command = argv.join(" ");
   return new Promise((resolve, reject) => {
     const bin = argv[0];
@@ -102,6 +112,7 @@ function defaultExecDocker(argv: string[], timeoutMs: number): Promise<void> {
             null,
             stdout,
             `docker exec timed out after ${timeoutMs}ms`,
+            step,
           ),
         );
       }
@@ -114,14 +125,14 @@ function defaultExecDocker(argv: string[], timeoutMs: number): Promise<void> {
       }
     };
     child.on("error", (err) => {
-      finish(() => reject(new DockerExecError(command, null, stdout, err.message)));
+      finish(() => reject(new DockerExecError(command, null, stdout, err.message, step)));
     });
     child.on("close", (code) => {
       if (code === 0) {
         finish(() => resolve());
         return;
       }
-      finish(() => reject(new DockerExecError(command, code, stdout, stderr)));
+      finish(() => reject(new DockerExecError(command, code, stdout, stderr, step)));
     });
   });
 }
@@ -172,18 +183,55 @@ export async function createSite(
     adminPassword,
     "--db-type",
     "mariadb",
-    "--install-app",
+    "--force",
+  ];
+
+  const installErpnextArgs = [
+    dockerBin,
+    "exec",
+    container,
+    "bench",
+    "--site",
+    site,
+    "install-app",
     "erpnext",
+  ];
+
+  const installProvisioningApiArgs = [
+    dockerBin,
+    "exec",
+    container,
+    "bench",
+    "--site",
+    site,
+    "install-app",
+    "provisioning_api",
   ];
 
   const setHostArgs = [dockerBin, "exec", container, "bench", "--site", site, "set-config", "host_name", domain];
 
   let lastCommand = "";
+  let lastStep: ProvisionStep = "create_site";
+
   try {
+    console.log("STEP: creating site");
+    lastStep = "create_site";
     lastCommand = newSiteArgs.join(" ");
-    await execDocker(newSiteArgs, timeoutMs);
+    await execDocker(newSiteArgs, timeoutMs, "create_site");
+
+    console.log("STEP: installing erpnext");
+    lastStep = "install_app_erpnext";
+    lastCommand = installErpnextArgs.join(" ");
+    await execDocker(installErpnextArgs, timeoutMs, "install_app_erpnext");
+
+    console.log("STEP: installing provisioning_api");
+    lastStep = "install_app_provisioning_api";
+    lastCommand = installProvisioningApiArgs.join(" ");
+    await execDocker(installProvisioningApiArgs, timeoutMs, "install_app_provisioning_api");
+
+    lastStep = "set_config_host_name";
     lastCommand = setHostArgs.join(" ");
-    await execDocker(setHostArgs, timeoutMs);
+    await execDocker(setHostArgs, timeoutMs, "set_config_host_name");
   } catch (error) {
     if (error instanceof DockerExecError) {
       return { ok: false, error: executionErrorFromDocker(error) };
@@ -197,6 +245,7 @@ export async function createSite(
         code: "ERP_COMMAND_FAILED",
         message: "ERP command failed",
         details: {
+          step: lastStep,
           command: lastCommand,
           exitCode: null,
           stdout: "",
