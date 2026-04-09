@@ -11,6 +11,7 @@ function baseEnv(overrides?: Record<string, string | undefined>) {
     ERP_COMMAND_TIMEOUT_MS: "5000",
     ERP_DOCKER_BACKEND_CONTAINER: "test-backend",
     ERP_NEW_SITE_ADMIN_PASSWORD: "test-admin-pass",
+    DB_ROOT_PASSWORD: "test-db-root-pass",
     ...overrides,
   });
 }
@@ -60,6 +61,8 @@ test("createSite runs new-site, install-app erpnext, install-app provisioning_ap
     "test-admin-pass",
     "--db-type",
     "mariadb",
+    "--mariadb-root-password",
+    "test-db-root-pass",
     "--force",
   ]);
   assert.deepEqual(calls[1], [

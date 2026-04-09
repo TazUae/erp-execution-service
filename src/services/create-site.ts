@@ -170,6 +170,7 @@ export async function createSite(
   const timeoutMs = env.ERP_COMMAND_TIMEOUT_MS;
   const container = env.ERP_DOCKER_BACKEND_CONTAINER;
   const adminPassword = env.ERP_NEW_SITE_ADMIN_PASSWORD;
+  const dbRootPassword = env.DB_ROOT_PASSWORD;
   const dockerBin = env.ERP_DOCKER_BIN;
 
   const newSiteArgs = [
@@ -183,6 +184,8 @@ export async function createSite(
     adminPassword,
     "--db-type",
     "mariadb",
+    "--mariadb-root-password",
+    dbRootPassword,
     "--force",
   ];
 

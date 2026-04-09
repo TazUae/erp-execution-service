@@ -5,7 +5,7 @@ import { z } from "zod";
  *
  * Keys here must stay in sync with `.env.example`: NODE_ENV, PORT, ERP_REMOTE_TOKEN,
  * ERP_COMMAND_TIMEOUT_MS, ERP_DOCKER_BIN, ERP_DOCKER_BACKEND_CONTAINER, ERP_NEW_SITE_ADMIN_PASSWORD,
- * ERP_BASE_URL, ERP_SITE_HOST, ERP_PROVISIONING_TOKEN, ERP_METHOD_CREATE_SITE.
+ * DB_ROOT_PASSWORD, ERP_BASE_URL, ERP_SITE_HOST, ERP_PROVISIONING_TOKEN, ERP_METHOD_CREATE_SITE.
  */
 /** Compose may substitute unset `${VAR}` as an empty string; treat that as unset for optional keys. */
 const emptyToUndefined = (v: unknown) => (v === "" ? undefined : v);
@@ -22,6 +22,8 @@ const EnvSchema = z.object({
   ERP_DOCKER_BACKEND_CONTAINER: z.string().trim().min(1).default("axiserp-erpnext-pnzjyk-backend-1"),
   /** Passed to `bench new-site --admin-password`. Override in production via env. */
   ERP_NEW_SITE_ADMIN_PASSWORD: z.string().trim().min(1).default("9Obtpzkb8c8"),
+  /** MariaDB root password for `bench new-site --mariadb-root-password` (spawn argv; not shell). */
+  DB_ROOT_PASSWORD: z.string().trim().min(1),
   /**
    * Base URL for the ERP HTTP API (e.g. `http://axis-erp-backend:8000`).
    * Used by `FrappeClient` when calling Frappe/ERPNext.

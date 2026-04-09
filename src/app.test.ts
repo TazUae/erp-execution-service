@@ -11,6 +11,7 @@ function testEnv() {
     PORT: "8791",
     ERP_REMOTE_TOKEN: "test-token-16chars-min",
     ERP_COMMAND_TIMEOUT_MS: "5000",
+    DB_ROOT_PASSWORD: "test-db-root",
   });
 }
 
