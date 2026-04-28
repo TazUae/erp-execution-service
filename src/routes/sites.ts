@@ -19,6 +19,7 @@ import {
   createSite,
   enableScheduler,
   installErp,
+  installFitdesk,
   setupComplete,
   setupCompany,
   setupFiscalYear,
@@ -184,6 +185,15 @@ export const sitesRoutes: FastifyPluginAsync<SitesRouteOpts> = async (fastify, o
     const parsed = SiteOperationBodySchema.safeParse(request.body);
     if (!parsed.success) return sendFailure(reply, zodToPhase2(parsed.error));
     const result = await installErp(bench, { site: parsed.data.site } as SiteOnlyParams);
+    return sendResult(reply, result);
+  });
+
+  // ---- POST /sites/install-fitdesk -------------------------------------
+  fastify.post("/sites/install-fitdesk", async (request, reply) => {
+    if (!requireAuth(request, reply, token)) return;
+    const parsed = SiteOperationBodySchema.safeParse(request.body);
+    if (!parsed.success) return sendFailure(reply, zodToPhase2(parsed.error));
+    const result = await installFitdesk(bench, { site: parsed.data.site } as SiteOnlyParams);
     return sendResult(reply, result);
   });
 

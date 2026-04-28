@@ -7,6 +7,7 @@ import {
   deriveApiUsername,
   enableScheduler,
   installErp,
+  installFitdesk,
   sanitizeSiteName,
   siteStatus,
   type BenchAgentLike,
@@ -321,6 +322,56 @@ test("installErp propagates bench failure mid-install as ERP_COMMAND_FAILED", as
     },
   });
   const r = await installErp(bench, { site: "acme.example" });
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.equal(r.error.code, "ERP_COMMAND_FAILED");
+});
+
+// --- installFitdesk ------------------------------------------------------
+
+test("installFitdesk installs fitdesk and returns applied", async () => {
+  const { bench, calls } = fakeBench();
+  const r = await installFitdesk(bench, { site: "acme.example" });
+  assert.equal(r.ok, true);
+  if (r.ok) {
+    assert.equal(r.data.action, "installFitdesk");
+    assert.equal(r.data.outcome, "applied");
+  }
+  assert.deepEqual(calls, [{ kind: "installApp", site: "acme.example", app: "fitdesk" }]);
+});
+
+test("installFitdesk returns already_done when fitdesk is already installed", async () => {
+  const { bench } = fakeBench({
+    installApp: async (site, app) => ({ status: "already_installed", site, app, skipped: true }),
+  });
+  const r = await installFitdesk(bench, { site: "acme.example" });
+  assert.equal(r.ok, true);
+  if (r.ok) {
+    assert.equal(r.data.action, "installFitdesk");
+    assert.equal(r.data.outcome, "already_done");
+    assert.equal(r.data.alreadyInstalled, true);
+  }
+});
+
+test("installFitdesk rejects empty site", async () => {
+  const { bench } = fakeBench();
+  const r = await installFitdesk(bench, { site: "" });
+  assert.equal(r.ok, false);
+  if (!r.ok) assert.equal(r.error.code, "ERP_VALIDATION_FAILED");
+});
+
+test("installFitdesk maps bench install failure through existing failure path", async () => {
+  const { bench } = fakeBench({
+    installApp: async () => {
+      throw new BenchAgentError("BENCH_COMMAND_FAILED", "fitdesk install failed", 500, {
+        step: "install_app",
+        exit_code: 1,
+        stdout: "",
+        stderr: "ModuleNotFoundError: fitdesk",
+        command: "bench --site acme install-app fitdesk",
+      });
+    },
+  });
+  const r = await installFitdesk(bench, { site: "acme.example" });
   assert.equal(r.ok, false);
   if (!r.ok) assert.equal(r.error.code, "ERP_COMMAND_FAILED");
 });

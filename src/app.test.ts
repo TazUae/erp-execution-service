@@ -372,6 +372,54 @@ test("POST /sites/install-erp returns 422 on missing site", async () => {
   }
 });
 
+test("POST /sites/install-fitdesk installs fitdesk and returns applied", async () => {
+  const env = testEnv();
+  const installs: Array<{ site: string; app: string }> = [];
+  const app = await buildApp({
+    env,
+    logger: createLogger(env),
+    benchAgent: stubBench({
+      installApp: async (site, appName) => {
+        installs.push({ site, app: appName });
+        return { status: "installed", site, app: appName };
+      },
+    }),
+  });
+  try {
+    const res = await app.inject({
+      method: "POST",
+      url: "/sites/install-fitdesk",
+      headers: { "content-type": "application/json", authorization: AUTH_HEADER },
+      payload: { site: "acme.example" },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = res.json() as SuccessBody<{ action: string; outcome: string }>;
+    assert.equal(body.data.action, "installFitdesk");
+    assert.equal(body.data.outcome, "applied");
+    assert.deepEqual(installs, [{ site: "acme.example", app: "fitdesk" }]);
+  } finally {
+    await app.close();
+  }
+});
+
+test("POST /sites/install-fitdesk returns 422 on missing site", async () => {
+  const env = testEnv();
+  const app = await buildApp({ env, logger: createLogger(env), benchAgent: stubBench() });
+  try {
+    const res = await app.inject({
+      method: "POST",
+      url: "/sites/install-fitdesk",
+      headers: { "content-type": "application/json", authorization: AUTH_HEADER },
+      payload: {},
+    });
+    assert.equal(res.statusCode, 422);
+    const body = res.json() as FailureBody;
+    assert.equal(body.error.code, "ERP_VALIDATION_FAILED");
+  } finally {
+    await app.close();
+  }
+});
+
 // --- POST /sites/enable-scheduler ----------------------------------------
 
 test("POST /sites/enable-scheduler succeeds", async () => {

@@ -257,6 +257,39 @@ export async function installErp(
   }
 }
 
+// --- installFitdesk ------------------------------------------------------
+
+/**
+ * POST /sites/install-fitdesk → bench install-app fitdesk.
+ *
+ * Idempotent at the bench-agent level; if already installed we return
+ * `outcome: "already_done"` and `alreadyInstalled: true`.
+ */
+export async function installFitdesk(
+  bench: BenchAgentLike,
+  params: SiteOnlyParams
+): Promise<StepResult<SiteOperationData>> {
+  const siteResult = validateSiteParam(params.site);
+  if (!siteResult.ok) return siteResult;
+  const site = siteResult.value;
+
+  try {
+    const fitdesk = await bench.installApp(site, "fitdesk");
+    const alreadyInstalled = fitdesk.status === "already_installed";
+    return {
+      ok: true,
+      data: {
+        action: "installFitdesk",
+        site,
+        outcome: alreadyInstalled ? "already_done" : "applied",
+        ...(alreadyInstalled ? { alreadyInstalled: true } : {}),
+      },
+    };
+  } catch (error) {
+    return benchAgentFailure(error, "installFitdesk");
+  }
+}
+
 // --- enableScheduler -----------------------------------------------------
 
 /**
