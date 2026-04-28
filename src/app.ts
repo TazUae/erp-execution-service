@@ -4,13 +4,13 @@ import type { Logger } from "pino";
 import type { FastifyBaseLogger } from "fastify";
 import { healthRoutes } from "./routes/health.js";
 import { sitesRoutes } from "./routes/sites.js";
-import type { CreateSiteParams, CreateSiteResult } from "./services/create-site.js";
+import type { BenchAgentLike } from "./services/site-steps.js";
 
 export type BuildAppOptions = {
   env: Env;
   logger: Logger;
-  /** Injected for tests; default calls ERP `create_site` via `createSite`. */
-  createSiteFn?: (params: CreateSiteParams) => Promise<CreateSiteResult>;
+  /** Injected for tests; production constructs a real BenchAgentClient from env. */
+  benchAgent?: BenchAgentLike;
 };
 
 export async function buildApp(options: BuildAppOptions) {
@@ -23,7 +23,7 @@ export async function buildApp(options: BuildAppOptions) {
   await fastify.register(healthRoutes, { env: options.env });
   await fastify.register(sitesRoutes, {
     env: options.env,
-    createSiteFn: options.createSiteFn,
+    benchAgent: options.benchAgent,
   });
 
   return fastify;
