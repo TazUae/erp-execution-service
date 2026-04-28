@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "docker:build": "docker build -t erp-execution-service:latest .",
-    "test": "node --import tsx --test src/app.test.ts src/config/env.test.ts src/services/create-site.test.ts src/lib/frappe-client/client.test.ts src/providers/erpnext/result-mapper.test.ts src/providers/erpnext/validation.test.ts"
+    "test": "node --import tsx --test src/app.test.ts src/config/env.test.ts src/services/site-steps.test.ts src/lib/frappe-client/client.test.ts src/providers/erpnext/result-mapper.test.ts src/providers/erpnext/validation.test.ts"
   },
   "dependencies": {
     "fastify": "^4.25.0",
