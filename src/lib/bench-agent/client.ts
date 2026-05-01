@@ -1,5 +1,4 @@
-import http from "node:http";
-import https from "node:https";
+import { Agent } from "undici";
 import { buildAuthHeaders, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "./sign.js";
 
 /**
@@ -18,6 +17,7 @@ export type BenchAgentClientOptions = {
   baseUrl: string;
   hmacSecret: string;
   timeoutMs: number;
+  fetchImpl?: typeof fetch;
 };
 
 export type BenchAgentErrorDetails = {
@@ -227,7 +227,18 @@ const RETRYABLE_NETWORK_CODES = new Set([
 ]);
 
 export class BenchAgentClient {
-  constructor(private readonly options: BenchAgentClientOptions) {}
+  private readonly dispatcherTimeoutMs: number;
+  private readonly dispatcher: Agent;
+  private readonly fetchImpl: typeof fetch;
+
+  constructor(private readonly options: BenchAgentClientOptions) {
+    this.dispatcherTimeoutMs = options.timeoutMs;
+    this.dispatcher = new Agent({
+      headersTimeout: this.dispatcherTimeoutMs,
+      bodyTimeout: this.dispatcherTimeoutMs,
+    });
+    this.fetchImpl = options.fetchImpl ?? fetch;
+  }
 
   /** POST /v1/sites — idempotent, agent checks site_config.json first. */
   async newSite(siteName: string, adminPassword: string): Promise<NewSiteResult> {
@@ -450,8 +461,6 @@ export class BenchAgentClient {
     const bodyStr = method === "POST" ? JSON.stringify(jsonBody ?? {}) : "";
     const url = joinUrl(this.options.baseUrl, path);
     const parsed = new URL(url);
-    const isHttps = parsed.protocol === "https:";
-    const lib = isHttps ? https : http;
 
     const headers: Record<string, string> = {
       Accept: "application/json",
@@ -475,34 +484,19 @@ export class BenchAgentClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
 
-    const port = parsed.port ? Number(parsed.port) : isHttps ? 443 : 80;
-
     try {
-      return await new Promise<{ status: number; bodyText: string }>((resolve, reject) => {
-        const opts: http.RequestOptions = {
-          hostname: parsed.hostname,
-          port,
-          path: `${parsed.pathname}${parsed.search}`,
-          method,
-          headers,
-          signal: controller.signal,
-        };
-        const req = lib.request(opts, (res) => {
-          let buf = "";
-          res.setEncoding("utf8");
-          res.on("data", (chunk: string) => {
-            buf += chunk;
-          });
-          res.on("end", () => {
-            resolve({ status: res.statusCode ?? 0, bodyText: buf });
-          });
-        });
-        req.on("error", reject);
-        if (method === "POST") {
-          req.write(bodyStr);
-        }
-        req.end();
-      });
+      const init: RequestInit & { dispatcher: Agent } = {
+        method,
+        headers,
+        signal: controller.signal,
+        dispatcher: this.dispatcher,
+      };
+      if (method === "POST") {
+        init.body = bodyStr;
+      }
+      const res = await this.fetchImpl(url, init);
+      const bodyText = await res.text();
+      return { status: res.status, bodyText };
     } finally {
       clearTimeout(timer);
     }
