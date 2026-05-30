@@ -5,3 +5,8 @@ dist/
 .env.local
 .env.production
 .env.secrets
+# Catch-all for other dotenv variants (e.g. .env.bak.YYYYMMDD) and backup files;
+# keep checked-in example templates.
+.env.*
+!.env*.example
+*.bak
