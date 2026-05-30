@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { FastifyRequest } from "fastify";
 
 export function extractBearerToken(request: FastifyRequest): string | null {
@@ -19,5 +20,10 @@ export function isAuthorized(request: FastifyRequest, expectedToken: string): bo
   if (!token) {
     return false;
   }
-  return token === expectedToken;
+  // Constant-time comparison: hash both inputs to a fixed-length digest first so
+  // `crypto.timingSafeEqual` neither short-circuits (timing oracle on the secret)
+  // nor throws/leaks on a length mismatch.
+  const tokenHash = crypto.createHash("sha256").update(token, "utf8").digest();
+  const expectedHash = crypto.createHash("sha256").update(expectedToken, "utf8").digest();
+  return crypto.timingSafeEqual(tokenHash, expectedHash);
 }
