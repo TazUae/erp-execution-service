@@ -121,6 +121,15 @@ export type BenchAgentLike = {
   setupFitdesk(site: string, params: SetupFitdeskParams): Promise<{ site: string; custom_fields: number; duration_ms: number }>;
   smokeTest(site: string, params: SmokeTestParams): Promise<{ site: string; smoke_test: string; tests_run: string[]; duration_ms: number }>;
   siteStatus(site: string): Promise<{ site: string; exists: boolean; apps: string[] }>;
+  siteReadiness(site: string): Promise<{
+    site: string;
+    ready: boolean;
+    checks: Record<string, boolean>;
+    apps: string[];
+    reason?: string;
+    db_name?: string;
+    missing_doctypes?: string[];
+  }>;
 };
 
 // ---------------------------------------------------------------------------
@@ -761,6 +770,50 @@ export async function smokeTest(
   }
 }
 
+// --- siteReadiness -------------------------------------------------------
+
+export type SiteReadinessData = SiteOperationData & {
+  ready: boolean;
+  checks: Record<string, boolean>;
+  apps: string[];
+  reason?: string;
+};
+
+/**
+ * GET /sites/{site}/readiness → bench readiness verdict.
+ *
+ * Used by control-plane to gate `erp_installed`: a `ready:false` verdict means
+ * the freshly-created site has not settled (the state that provokes MariaDB
+ * 1412 on install-app), so the caller should wait and re-check before installing.
+ */
+export async function siteReadiness(
+  bench: BenchAgentLike,
+  params: SiteOnlyParams
+): Promise<StepResult<SiteReadinessData>> {
+  const siteResult = validateSiteParam(params.site);
+  if (!siteResult.ok) return siteResult;
+  const site = siteResult.value;
+
+  try {
+    const result = await bench.siteReadiness(site);
+    return {
+      ok: true,
+      data: {
+        action: "siteReadiness",
+        site,
+        outcome: "applied",
+        ready: result.ready,
+        checks: result.checks,
+        apps: result.apps,
+        ...(result.reason ? { reason: result.reason } : {}),
+        ...(result.db_name ? { dbName: result.db_name } : {}),
+      },
+    };
+  } catch (error) {
+    return benchAgentFailure(error, "siteReadiness");
+  }
+}
+
 // --- siteStatus ----------------------------------------------------------
 
 export type SiteStatusData = SiteOperationData & {
@@ -878,15 +931,20 @@ function benchAgentFailure(error: unknown, action: string): StepResult<never> {
       typeof error.details.exit_code === "number" ? error.details.exit_code : undefined;
 
     const code = mapBenchErrorToPhase2(error, stderr);
+    const transient = isTransientDbSignature(stderr, stdout);
     return {
       ok: false,
       error: {
         code,
         message: error.message || "bench-agent request failed",
-        retryable: isRetryable(code),
+        // A transient MariaDB DDL error (1412/1205/1213) against a freshly-created
+        // or concurrently-modified schema is safe to retry because every bench step
+        // is idempotent. The bench-agent surfaces it as a generic BENCH_COMMAND_FAILED,
+        // so we flip `retryable` here even though the code stays ERP_COMMAND_FAILED.
+        retryable: isRetryable(code) || transient,
         details: `action=${action}; benchCode=${error.code}${
-          asString(error.details.command) ? `; command=${asString(error.details.command)}` : ""
-        }`,
+          transient ? "; transient=db_ddl" : ""
+        }${asString(error.details.command) ? `; command=${asString(error.details.command)}` : ""}`,
         ...(stdout ? { stdout } : {}),
         ...(stderr ? { stderr } : {}),
         ...(exitCode !== undefined ? { exitCode } : {}),
@@ -926,6 +984,33 @@ function mapBenchErrorToPhase2(err: BenchAgentError, stderr: string): Phase2Erro
 
 function isRetryable(code: Phase2ErrorCode): boolean {
   return code === "INFRA_UNAVAILABLE" || code === "ERP_TIMEOUT";
+}
+
+/**
+ * Transient MariaDB failures that occur when DDL runs against a freshly-created
+ * or concurrently-modified schema. Safe to retry because every bench step that
+ * can produce them is idempotent. Detected from command output because the
+ * bench-agent reports them as a generic BENCH_COMMAND_FAILED with the raw
+ * pymysql error in stderr.
+ *
+ *   1412 — Table definition has changed, please retry transaction
+ *   1205 — Lock wait timeout exceeded
+ *   1213 — Deadlock found when trying to get lock
+ *
+ * Numeric codes are matched only in errno context (pymysql tuple `(1412, …)` or
+ * `errno 1412`) to avoid false positives on unrelated numbers.
+ */
+const TRANSIENT_DB_PATTERNS: RegExp[] = [
+  /table definition has changed/i,
+  /lock wait timeout exceeded/i,
+  /deadlock found when trying to get lock/i,
+  /\(\s*(?:1412|1205|1213)\s*,/,
+  /errno[:=]?\s*(?:1412|1205|1213)\b/i,
+];
+
+function isTransientDbSignature(stderr: string, stdout: string): boolean {
+  const haystack = `${stderr}\n${stdout}`;
+  return TRANSIENT_DB_PATTERNS.some((re) => re.test(haystack));
 }
 
 function asString(v: unknown): string {

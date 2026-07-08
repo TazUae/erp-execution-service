@@ -30,6 +30,7 @@ import {
   setupRegional,
   smokeTest,
   siteStatus,
+  siteReadiness,
   type BenchAgentLike,
   type CreateSiteParams,
   type SetupCompleteParams,
@@ -381,6 +382,15 @@ export const sitesRoutes: FastifyPluginAsync<SitesRouteOpts> = async (fastify, o
     const parsed = SiteStatusParamsSchema.safeParse(request.params);
     if (!parsed.success) return sendFailure(reply, zodToPhase2(parsed.error));
     const result = await siteStatus(bench, { site: parsed.data.site });
+    return sendResult(reply, result);
+  });
+
+  // ---- GET /sites/:site/readiness --------------------------------------
+  fastify.get<{ Params: { site: string } }>("/sites/:site/readiness", async (request, reply) => {
+    if (!requireAuth(request, reply, token)) return;
+    const parsed = SiteStatusParamsSchema.safeParse(request.params);
+    if (!parsed.success) return sendFailure(reply, zodToPhase2(parsed.error));
+    const result = await siteReadiness(bench, { site: parsed.data.site });
     return sendResult(reply, result);
   });
 };
