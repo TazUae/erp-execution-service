@@ -208,6 +208,48 @@ test("createSite maps BENCH_TIMEOUT to ERP_TIMEOUT (retryable)", async () => {
   }
 });
 
+test("installErp flags MariaDB 1412 as transient/retryable (code stays ERP_COMMAND_FAILED)", async () => {
+  const { bench } = fakeBench({
+    installApp: async (site, app) => {
+      throw new BenchAgentError("BENCH_COMMAND_FAILED", "bench command failed", 500, {
+        step: "install_app",
+        exit_code: 1,
+        stdout: "",
+        stderr:
+          "pymysql.err.OperationalError: (1412, 'Table definition has changed, please retry transaction')",
+        command: `bench --site ${site} install-app ${app}`,
+      });
+    },
+  });
+  const r = await installErp(bench, { site: "valid-site" });
+  assert.equal(r.ok, false);
+  if (!r.ok) {
+    assert.equal(r.error.code, "ERP_COMMAND_FAILED");
+    assert.equal(r.error.retryable, true);
+    assert.match(r.error.details ?? "", /transient=db_ddl/);
+  }
+});
+
+test("installErp keeps a non-transient BENCH_COMMAND_FAILED non-retryable", async () => {
+  const { bench } = fakeBench({
+    installApp: async (site, app) => {
+      throw new BenchAgentError("BENCH_COMMAND_FAILED", "bench command failed", 500, {
+        step: "install_app",
+        exit_code: 1,
+        stdout: "",
+        stderr: "ModuleNotFoundError: No module named 'erpnext'",
+        command: `bench --site ${site} install-app ${app}`,
+      });
+    },
+  });
+  const r = await installErp(bench, { site: "valid-site" });
+  assert.equal(r.ok, false);
+  if (!r.ok) {
+    assert.equal(r.error.code, "ERP_COMMAND_FAILED");
+    assert.equal(r.error.retryable, false);
+  }
+});
+
 test("createSite maps NETWORK_ERROR to INFRA_UNAVAILABLE (retryable)", async () => {
   const { bench } = fakeBench({
     newSite: async () => {
