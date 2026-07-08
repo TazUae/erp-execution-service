@@ -10,6 +10,7 @@ import {
   installFitdesk,
   sanitizeSiteName,
   siteStatus,
+  siteReadiness,
   type BenchAgentLike,
 } from "./site-steps.js";
 import { BenchAgentError } from "../lib/bench-agent/client.js";
@@ -20,7 +21,8 @@ type Call =
   | { kind: "setConfig"; site: string; key: string; value: string }
   | { kind: "enableScheduler"; site: string }
   | { kind: "createApiUser"; site: string; username: string }
-  | { kind: "siteStatus"; site: string };
+  | { kind: "siteStatus"; site: string }
+  | { kind: "siteReadiness"; site: string };
 
 function fakeBench(
   overrides: Partial<BenchAgentLike> = {}
@@ -62,6 +64,17 @@ function fakeBench(
       (async (site) => {
         calls.push({ kind: "siteStatus", site });
         return { site, exists: true, apps: ["frappe", "erpnext", "provisioning_api"] };
+      }),
+    siteReadiness:
+      overrides.siteReadiness ??
+      (async (site) => {
+        calls.push({ kind: "siteReadiness", site });
+        return {
+          site,
+          ready: true,
+          checks: { site_config: true, db_connect: true, core_doctypes: true, list_apps: true },
+          apps: ["frappe"],
+        };
       }),
   };
   return { bench, calls };
@@ -498,5 +511,37 @@ test("siteStatus returns exists=false for unknown site", async () => {
   if (r.ok) {
     assert.equal(r.data.exists, false);
     assert.deepEqual(r.data.apps, []);
+  }
+});
+
+// --- siteReadiness -------------------------------------------------------
+
+test("siteReadiness returns ready verdict from bench-agent", async () => {
+  const { bench, calls } = fakeBench();
+  const r = await siteReadiness(bench, { site: "acme.example" });
+  assert.equal(r.ok, true);
+  if (r.ok) {
+    assert.equal(r.data.action, "siteReadiness");
+    assert.equal(r.data.ready, true);
+    assert.equal(r.data.checks.core_doctypes, true);
+  }
+  assert.deepEqual(calls, [{ kind: "siteReadiness", site: "acme.example" }]);
+});
+
+test("siteReadiness surfaces not-ready verdict with reason", async () => {
+  const { bench } = fakeBench({
+    siteReadiness: async (site) => ({
+      site,
+      ready: false,
+      checks: { site_config: true, db_connect: true, core_doctypes: false, list_apps: true },
+      apps: ["frappe"],
+      reason: "missing_core_doctypes",
+    }),
+  });
+  const r = await siteReadiness(bench, { site: "acme.example" });
+  assert.equal(r.ok, true);
+  if (r.ok) {
+    assert.equal(r.data.ready, false);
+    assert.equal(r.data.reason, "missing_core_doctypes");
   }
 });

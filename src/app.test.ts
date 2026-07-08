@@ -45,6 +45,14 @@ function stubBench(overrides: Partial<BenchAgentLike> = {}): BenchAgentLike {
     siteStatus:
       overrides.siteStatus ??
       (async (site) => ({ site, exists: true, apps: ["frappe", "erpnext", "provisioning_api"] })),
+    siteReadiness:
+      overrides.siteReadiness ??
+      (async (site) => ({
+        site,
+        ready: true,
+        checks: { site_config: true, db_connect: true, core_doctypes: true, list_apps: true },
+        apps: ["frappe"],
+      })),
   };
 }
 

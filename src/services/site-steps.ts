@@ -121,6 +121,15 @@ export type BenchAgentLike = {
   setupFitdesk(site: string, params: SetupFitdeskParams): Promise<{ site: string; custom_fields: number; duration_ms: number }>;
   smokeTest(site: string, params: SmokeTestParams): Promise<{ site: string; smoke_test: string; tests_run: string[]; duration_ms: number }>;
   siteStatus(site: string): Promise<{ site: string; exists: boolean; apps: string[] }>;
+  siteReadiness(site: string): Promise<{
+    site: string;
+    ready: boolean;
+    checks: Record<string, boolean>;
+    apps: string[];
+    reason?: string;
+    db_name?: string;
+    missing_doctypes?: string[];
+  }>;
 };
 
 // ---------------------------------------------------------------------------
@@ -758,6 +767,50 @@ export async function smokeTest(
     };
   } catch (error) {
     return benchAgentFailure(error, "smokeTest");
+  }
+}
+
+// --- siteReadiness -------------------------------------------------------
+
+export type SiteReadinessData = SiteOperationData & {
+  ready: boolean;
+  checks: Record<string, boolean>;
+  apps: string[];
+  reason?: string;
+};
+
+/**
+ * GET /sites/{site}/readiness → bench readiness verdict.
+ *
+ * Used by control-plane to gate `erp_installed`: a `ready:false` verdict means
+ * the freshly-created site has not settled (the state that provokes MariaDB
+ * 1412 on install-app), so the caller should wait and re-check before installing.
+ */
+export async function siteReadiness(
+  bench: BenchAgentLike,
+  params: SiteOnlyParams
+): Promise<StepResult<SiteReadinessData>> {
+  const siteResult = validateSiteParam(params.site);
+  if (!siteResult.ok) return siteResult;
+  const site = siteResult.value;
+
+  try {
+    const result = await bench.siteReadiness(site);
+    return {
+      ok: true,
+      data: {
+        action: "siteReadiness",
+        site,
+        outcome: "applied",
+        ready: result.ready,
+        checks: result.checks,
+        apps: result.apps,
+        ...(result.reason ? { reason: result.reason } : {}),
+        ...(result.db_name ? { dbName: result.db_name } : {}),
+      },
+    };
+  } catch (error) {
+    return benchAgentFailure(error, "siteReadiness");
   }
 }
 

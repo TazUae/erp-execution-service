@@ -80,6 +80,16 @@ export type SiteStatusResult = {
   apps: string[];
 };
 
+export type SiteReadinessResult = {
+  site: string;
+  ready: boolean;
+  checks: Record<string, boolean>;
+  apps: string[];
+  reason?: string;
+  db_name?: string;
+  missing_doctypes?: string[];
+};
+
 export type SetupCompanyParams = {
   companyName: string;
   companyAbbr: string;
@@ -380,6 +390,11 @@ export class BenchAgentClient {
   /** GET /v1/sites/{site}/status. */
   async siteStatus(site: string): Promise<SiteStatusResult> {
     return this.get<SiteStatusResult>(`/v1/sites/${encodeURIComponent(site)}/status`);
+  }
+
+  /** GET /v1/sites/{site}/readiness — non-raising readiness verdict for the install-app gate. */
+  async siteReadiness(site: string): Promise<SiteReadinessResult> {
+    return this.get<SiteReadinessResult>(`/v1/sites/${encodeURIComponent(site)}/readiness`);
   }
 
   /** GET /health — unauthenticated liveness probe. */
